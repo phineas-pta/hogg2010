@@ -1,0 +1,362 @@
+---
+title: "solutions in Julia to the exercises in David Hogg’s 2010 tutorial paper on fitting a model to data"
+author: "PTA"
+license: "CC BY"
+engine: julia
+julia:
+  exeflags: ["--threads=auto", "--project=."]
+format:
+  pdf:
+    toc: true
+    number-sections: true
+    colorlinks: true
+    documentclass: scrreprt
+    papersize: a4
+    geometry: ["margin=1cm"]
+    include-in-header:
+      text: |
+        \usepackage{framed,fvextra}
+        \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+    include-before-body:
+      text: |
+        \RecustomVerbatimEnvironment{verbatim}{Verbatim}{showspaces=false,showtabs=false,breaksymbolleft={},breaklines}
+highlight-style: monokai
+monofont: "Iosevka-Regular"
+code-line-numbers: true
+fig-align: center
+---
+
+<!--
+use fvextra to break long line in code block
+to use local fonts, they must be installed at system level, i.e. C:\Windows\Fonts
+in windows to show plot: download https://sourceforge.net/projects/tumagcc/files/rsvg-convert-2.40.20.7z/download
+then put rsvg-convert.exe into <quarto path>\bin\tools
+-->
+
+# preliminary {.unnumbered}
+
+reference: *David W. Hogg*, *Jo Bovy*, *Dustin Lang*. 2010. **Data analysis recipes: Fitting a model to data**: [`https://arxiv.org/pdf/1008.4686`](https://arxiv.org/pdf/1008.4686)
+
+source code: [`https://github.com/davidwhogg/DataAnalysisRecipes/blob/master/straightline/straightline.tex`](https://github.com/davidwhogg/DataAnalysisRecipes/blob/master/straightline/straightline.tex)
+
+data:
+\begin{tabular}{|l|l|l|l|l|l|}\hline
+$x$ & $y$ & $\sigma_y$ & $\sigma_x$ & $\rho_{xy}$\\ \hline
+201 & 592 & 61 & 9 & -0.84\\
+244 & 401 & 25 & 4 & 0.31\\
+47 & 583 & 38 & 11 & 0.64\\
+287 & 402 & 15 & 7 & -0.27\\
+203 & 495 & 21 & 5 & -0.33\\
+58 & 173 & 15 & 9 & 0.67\\
+210 & 479 & 27 & 4 & -0.02\\
+202 & 504 & 14 & 4 & -0.05\\
+198 & 510 & 30 & 11 & -0.84\\
+158 & 416 & 16 & 7 & -0.69\\
+165 & 393 & 14 & 5 & 0.30\\
+201 & 442 & 25 & 5 & -0.46\\
+157 & 317 & 52 & 5 & -0.03\\
+131 & 311 & 16 & 6 & 0.50\\
+166 & 400 & 34 & 6 & 0.73\\
+160 & 337 & 31 & 5 & -0.52\\
+186 & 423 & 42 & 9 & 0.90\\
+125 & 334 & 26 & 8 & 0.40\\
+218 & 533 & 16 & 6 & -0.78\\
+146 & 344 & 22 & 5 & -0.56\\ \hline
+\end{tabular}
+
+The full uncertainty covariance matrix for each data point is given by $\left[\begin{array}{cc} \sigma_x^2 & \sigma_{xy} \\ \sigma_{xy} & \sigma_y^2\end{array}\right]$ with $\sigma_{xy}=\rho_{xy}\sigma_x\sigma_y$.
+
+```{julia}
+#| eval: false
+import Pkg
+Pkg.add(["Turing", "StatsPlots", "LogExpFunctions"])
+```
+
+```{julia}
+using Statistics: mean
+using LinearAlgebra: dot, diagm
+using Turing, LogExpFunctions, StatsPlots
+
+const N = 20;
+const x    = [201., 244.,  47., 287., 203.,  58., 210., 202., 198., 158., 165., 201., 157., 131., 166., 160., 186., 125., 218., 146.];
+const y    = [592., 401., 583., 402., 495., 173., 479., 504., 510., 416., 393., 442., 317., 311., 400., 337., 423., 334., 533., 344.];
+const σ_x  = [  9.,   4.,  11.,   7.,   5.,   9.,   4.,   4.,  11.,   7.,   5.,   5.,   5.,   6.,   6.,   5.,   9.,   8.,   6.,   5.];
+const σ_y  = [ 61.,  25.,  38.,  15.,  21.,  15.,  27.,  14.,  30.,  16.,  14.,  25.,  52.,  16.,  34.,  31.,  42.,  26.,  16.,  22.];
+const ρ_xy = [-.84,  .31,  .64, -.27, -.33,  .67, -.02, -.05, -.84, -.69,   .3, -.46, -.03,   .5,  .73, -.52,   .9,   .4, -.78, -.56];
+```
+
+data points 5 through 20 in the table
+```{julia}
+const subset_x    =    x[5:end];
+const subset_y    =    y[5:end];
+const subset_σ_x  =  σ_x[5:end];
+const subset_σ_y  =  σ_y[5:end];
+const subset_ρ_xy = ρ_xy[5:end];
+```
+
+# Standard practice
+
+## exercise 01
+
+\begin{framed}
+Using the standard linear algebra method, fit the straight line $y=m\,x+b$ to the $x$, $y$, and $\sigma_y$ values for data points 5 through 20 in the table. That is, ignore the first 4 data points, and also ignore the columns for $\sigma_x$ and $\rho_{xy}$. Make a plot showing the points, their uncertainties, and the best-fit line. What is the standard uncertainty variance $\sigma_m^2$ on the slope of the line?
+\end{framed}
+
+Construct the matrices:
+$$
+Y = \left[\begin{array}{c} y_1 \\ y_2 \\ \cdots \\ y_N \end{array}\right]
+\quad
+A = \left[\begin{array}{cc} 1 & x_1 \\ 1 & x_2 \\ \cdots & \cdots \\ 1 & x_N \end{array}\right]
+\quad
+C = \left[\begin{array}{cccc}
+\sigma_{y_1}^{2} & 0 & \cdots & 0 \\
+0 & \sigma_{y_2}^{2} & \cdots & 0 \\
+\cdots & \cdots & \cdots & \cdots \\
+0 & 0 & \cdots & \sigma_{y_N}^{2}
+\end{array}\right]
+$$
+
+$\left[\begin{array}{c} b \\ m \end{array}\right] = X = \left[A^\top\,C^{-1}\,A\right]^{-1}\,\left[A^\top\,C^{-1}\,Y\right]$ where m is the slope and b is the intercept
+
+```{julia}
+Y = subset_y[:, :];
+A = hcat(ones(length(subset_x)), subset_x);
+C = diagm(subset_σ_y.^2);
+
+tmp = A' * inv(C);
+cov = inv(tmp * A); # covariance matrix
+X = cov * tmp * Y;
+b, m = X
+```
+
+```{julia}
+plot(subset_x, subset_y, yerror=subset_σ_y, seriestype=:scatter, label = "")
+plot!(x -> m*x + b, label = "")
+```
+
+standard uncertainty variance on b is `{julia} sqrt(cov[1, 1])`, on m is `{julia} sqrt(cov[1, 1])`
+
+## exercise 02
+
+\begin{framed}
+Repeat exercise 01 but for all the data points in the table. What is the standard uncertainty variance $\sigma_m^2$ on the slope of the line? Is there anything you don’t like about the result? Is there anything different about the new points you have included beyond those used in exercise 01?
+\end{framed}
+
+```{julia}
+Y = y[:, :];
+A = hcat(ones(length(x)), x);
+C = diagm(σ_y.^2);
+
+tmp = A' * inv(C);
+cov = inv(tmp * A); # covariance matrix
+X = cov * tmp * Y;
+b, m = X
+```
+
+```{julia}
+plot(x, y, yerror=σ_y, seriestype=:scatter, label = "")
+plot!(x -> m*x + b, label = "")
+```
+
+the outliers drastically affect the fit
+
+standard uncertainty variance on b is `{julia} sqrt(cov[1, 1])`, on m is `{julia} sqrt(cov[1, 1])`
+
+uncertainties actually decrease
+
+## exercise 03
+
+\begin{framed}
+Generalize the method of this section to fit a general quadratic (2nd order) relationship. Add another column to matrix $A$ containing the values $x_i^2$, and another element to vector $X$ (call it $q$). Then re-do exercise 01 butfitting for and plotting the best quadratic relationship $q\,x^2 + m\,x + b$
+\end{framed}
+
+```{julia}
+Y = subset_y[:, :];
+A = hcat(ones(length(subset_x)), subset_x, subset_x.^2);
+C = diagm(subset_σ_y.^2);
+
+tmp = A' * inv(C);
+cov = inv(tmp * A); # covariance matrix
+X = cov * tmp * Y;
+b, m, q = X
+```
+
+```{julia}
+plot(subset_x, subset_y, yerror=subset_σ_y, seriestype=:scatter, label = "")
+plot!(x -> q*x^2 + m*x + b, label = "")
+```
+
+standard uncertainty variance on b is `{julia} sqrt(cov[1, 1])`, on m is `{julia} sqrt(cov[1, 1])`, on q is `{julia} sqrt(cov[2, 2])`
+
+# The objective function
+
+## exercise 04
+
+\begin{framed}
+Imagine a set of $N$ measurements $t_i$, with uncertainty variances $\sigma_{t_i}^2$, all of the same (unknown) quantity $T$. Assuming the generative model that each $t_i$ differs from $T$ by a Gaussian-distributed offset, taken from a Gaussian with zero mean and variance $\sigma_{t_i}^2$, write down an expression for the log likelihood $\ln \mathcal{L}$ for the data given the model parameter $T$. Take a derivative and show that the maximum likelihood value for $T$ is the usual weighted mean.
+\end{framed}
+
+The Gaussian log-likelihood in this case is
+$$
+\ln{\mathcal{L}(t_i, \sigma_t\,|\,T)} = -\frac{N}{2}\ln(2\pi) - \frac{N}{2}\ln{\sigma_{t_i}^2} - \sum_{i=1}^N \frac{(t_i - T)^2}{2\sigma_{t_i}^2}
+$$
+
+The derivative of this likelihood is
+$$
+\frac{\partial}{\partial T} \ln{\mathcal{L}(t_i, \sigma_t\,|\,T)} = -\frac{\partial}{\partial T} \sum_{i=1}^N \frac{(t_i - T)^2}{{2\sigma_{t_i}^2}} = \sum_{i=1}^N \frac{(t_i - T)}{\sigma_{t_i}^2}
+$$
+
+This takes its maximum when the derivative is $0$
+$$
+\sum_{i=1}^N \frac{(t_i - T)}{\sigma_{t_i}^2} = 0 = \sum_{i=1}^N \frac{t_i}{\sigma_{t_i}^2} -T\sum_{i=1}^N \frac{1}{\sigma_{t_i}^2}
+$$
+
+we get the weighted mean as expected
+$$
+\hat{T} = \frac{\sum_{i=1}^N \frac{t_i}{\sigma_{t_i}^2}}{\sum_{i=1}^N \frac{1}{\sigma_{t_i}^2}}
+$$
+
+## exercise 05
+
+\begin{framed}
+Take the matrix formulation for $\chi^2$ given in equation (7) and take derivatives to show that the minimum is at the matrix location given in equation (5)
+\end{framed}
+
+*Equation (7)* is $\chi^2 = [Y-AX]^\top C^{-1}[Y-AX]$
+
+By the product rule, we have $\frac{\partial}{\partial X} \chi^2 = \left(\frac{\partial}{\partial X}[Y-AX]^\top\right)C^{-1}[Y-AX] + [Y-AX]^\top\left(\frac{\partial}{\partial X} C^{-1}[Y-AX]\right)$
+
+Differentiating, we get $\frac{\partial}{\partial X} \chi^2 = -A^\top C^{-1}[Y-AX] [Y-AX]^\top C^{-1}[-A]$
+
+Multiplying out $\frac{\partial}{\partial X} \chi^2 = -A^\top C^{-1}Y + A^\top C^{-1}AX - Y^\top C^{-1}A + [AX]^\top C^{-1}A$
+
+Since $-A^\top C^{-1}Y$ is a scalar, it equals its own transpose $\frac{\partial}{\partial X} \chi^2 = -2A^\top C^{-1}Y + A^\top C^{-1}AX + X^\top A^\top C^{-1}A$
+
+The two terms in $X$ are also simply transposes of one another, and can thus be trivially added together $\frac{\partial}{\partial X} \chi^2 = -2A^\top C^{-1}Y + 2 A^\top C^{-1}AX$
+
+$X$ takes its maximum likelihood value when the derivative is $0$: $-2A^\top C^{-1}Y + 2 A^\top C^{-1}A\hat{X} = 0$
+
+Rearranging: $A^\top C^{-1}A\hat{X} = 2A^\top C^{-1}Y$
+
+And so $\hat{X} = \left(A^\top C^{-1}A\right)^{-1}A^\top C^{-1}Y$ As given in *equation (5)*
+
+# Pruning outliers
+
+## exercise 06
+
+\begin{framed}
+Using the mixture model proposed above — that treats the distribution as a mixture of a thin line containing a fraction $[1-P_{\mathrm{bad}}]$ of the points and a broader Gaussian containing a fraction $P_{\mathrm{bad}}$ of the points — find the best-fit (the maximum a posteriori) straight line $y=m\,x+b$ for the $x$, $y$, and $\sigma_y$ for the data. Before choosing the MAP line, marginalize over parameters $(P_{\mathrm{bad}},Y_{\mathrm{bad}},V_{\mathrm{bad}})$. That is, if you take a sampling approach, this means sampling the full 5-dimensional parameter space but then choosing the peak value in the histogram of samples in the two-dimensional parameter space $(m,b)$.  Make one plot showing this 2-dimensional histogram, and another showing the points, their uncertainties, and the MAP line. How does this compare to the standard result you obtained in exercise 02?  Do you like the MAP line better or worse? For extra credit, plot a sampling of 10 lines drawn from the marginalized posterior distribution for $(m,b)$ (marginalized over $(P_{\mathrm{bad}},Y_{\mathrm{bad}},V_{\mathrm{bad}})$) and plot the samples as a set of light grey or ransparent lines.
+\end{framed}
+
+lorem ipsum
+
+## exercise 07
+
+\begin{framed}
+Solve exercise 06 but now plot the fully marginalized (over $m,b,Y_{\mathrm{bad}},V_{\mathrm{bad}}$) posterior distribution function for parameter $P_{\mathrm{bad}}$. Is this distribution peaked about where you would expect, given the data? Now repeat the problem, but dividing all the data uncertainty variances $\sigma_{yi}^2$ by 4 (or dividing the uncertainties $\sigma_{yi}$ by 2). Again plot the fully marginalized posterior distribution function for parameter $P_{\mathrm{bad}}$. Discuss.
+\end{framed}
+
+lorem ipsum
+
+# Uncertainties in the best-fit parameters
+
+## exercise 08
+
+\begin{framed}
+Compute the standard uncertainty $\sigma_m^2$ obtained for the slope of the line found by the standard fit you did in exercise 02. Now make jackknife (20 trials) and bootstrap estimates for the uncertainty $\sigma_m^2$. How do the uncertainties compare and which seems most reasonable, given the data and uncertainties on the data?
+\end{framed}
+
+lorem ipsum
+
+## exercise 09
+
+\begin{framed}
+Re-do exercise 06 — the mixture-based outlier model — but just with the “inlier” points 5 through 20 from the data. Then do the same again, but with all measurement uncertainties reduced by a factor of 2 (uncertainty variances reduced by a factor of 4). Plot the marginalized posterior probability distributions for line parameters $(m,b)$ in both cases. Did these posterior distributions
+get smaller or larger with the reduction in the data-point uncertainties? Compare this with the dependence of the standard uncertainty estimate $\left[A^\top\,C^{-1}\,A\right]^{-1}$.
+\end{framed}
+
+lorem ipsum
+
+# Non-Gaussian uncertainties
+
+*no exercise in this section*
+
+# Goodness of fit and unknown uncertainties
+
+## exercise 10
+
+\begin{framed}
+Assess the $\chi^2$ value for the fit performed in exercise 01 (do that problem first if you haven’t already).  Is the fit good?  What about for the fit performed in exercise 02?
+\end{framed}
+
+lorem ipsum
+
+## exercise 11
+
+\begin{framed}
+Re-do the fit of exercise 01 but setting all $\sigma_{y_i}^2=S$, that is, ignoring the uncertainties and replacing them all with the same value $S$. What uncertainty variance $S$ would make $\chi^2 = N-2$?  How does it compare to the mean and median of the uncertainty variances $\left(\sigma_{y_i}^2\right)_{i=1}^N$?
+\end{framed}
+
+lorem ipsum
+
+## exercise 12
+
+\begin{framed}
+Flesh out and write all equations for the Bayesian uncertainty estimation and marginalization procedure described in this section. Note that the inference and marginalization would be very expensive without excellent sampling tools! Make the additional (unjustified) assumption that all the uncertainties have the same variance $\sigma_{y_i}^2=S$ to make the problem tractable. Apply the method to the $x$ and $y$ values for points 5 through 20 in the data. Make a plot showing the points, the maximum a posteriori value of the uncertainty variance as error bars, and the maximum a posteriori straight line. For extra credit, plot 2 straight lines, one that is maximum a posteriori for the full posterior and one that is the same but for the posterior after the uncertainty variance $S$ has been marginalized out. Also plot 2 sets of error bars, one that shows the maximum for the full posterior and one for the posterior after the line parameters $(m,b)$ have been marginalized out.
+\end{framed}
+
+lorem ipsum
+
+# Arbitrary 2-dimensional uncertainties
+
+## exercise 13
+
+\begin{framed}
+Using the method of this section, fit the straight line $y=m\,x+b$ to the $x$, $y$, $\sigma_x^2$, $\sigma_{xy}$, and $\sigma_y^2$ values of points 5 through 20 taken from the data. Make a plot showing the points, their 2-dimensional uncertainties (show them as one-sigma ellipses), and the best-fit line.
+\end{framed}
+
+lorem ipsum
+
+## exercise 14
+
+\begin{framed}
+Repeat exercise 13, but using all of the data. Some of the points are now outliers, so your fit may look worse. Follow the fit by a robust procedure analogous to the Bayesian mixture model with bad-data
+probability $P_{\mathrm{bad}}$ described in section Pruning outliers. Use something sensible for the prior probability distribution for $(m,b)$. Plot the 2 results with the data and uncertainties. For extra credit, plot a sampling of 10 lines drawn from the marginalized posterior distribution for $(m,b)$ and plot the samples as a set of light grey or transparent lines. For extra extra credit, mark each
+data point on your plot with the fully marginalized probability that the point is bad (that is, rejected, or has $q=0$).
+\end{framed}
+
+lorem ipsum
+
+## exercise 15
+
+\begin{framed}
+Perform the abominable forward-reverse fitting procedure on points 5 through 20 from the data. That is, fit a straight line to the $y$ values of the points, using the $y$-direction uncertainties $\sigma_y^2$ only, by the standard method described in section Standard practice. Now transpose the problem and fit the same data but fitting the $x$ values using the $x$-direction uncertainties $\sigma_x^2$ only. Make a plot showing the data points, the $x$-direction and $y$-direction uncertainties, and the 2 best-fit lines. Comment.
+\end{framed}
+
+lorem ipsum
+
+## exercise 16
+
+\begin{framed}
+Perform principal components analysis on points 5 through 20 from the data. That is, diagonalize the 2×2 matrix $Q$ given by $Q = \sum_{i=1}^N\,\left[Z_i-\bar{Z}\right]\,{\left[Z_i-\bar{Z}\right]}^\top$ with $\bar{Z} = \frac{1}{N}\,\sum_{i=1}^N\,Z_i$. Find the eigenvector of $Q$ with the largest eigenvalue. Now make a plot showing the data points, and the line that goes through the mean $\bar{Z}$ of the data with the slope corresponding to the direction of the principal eigenvector. Comment.
+\end{framed}
+
+lorem ipsum
+
+# Intrinsic scatter
+
+## exercise 17
+
+\begin{framed}
+Re-do exercise 13, but now allowing for an orthogonal intrinsic Gaussian variance $V$ and only excluding data point 3. Re-make the plot, showing not the best-fit line but rather the $\pm\sqrt{V}$ lines for the maximum-likelihood intrinsic relation.
+\end{framed}
+
+lorem ipsum
+
+## exercise 18
+
+\begin{framed}
+Re-do exercise 17 but as a Bayesian, with sensible Bayesian priors on $(\theta,b_\perp,V)$. Find and marginalize the posterior distribution over $(\theta,b_\perp)$ to generate a marginalized posterior probability for the intrinsic variance parameter $V$. Plot this posterior with the 95% and 99% upper limits on $V$ marked. Why did we ask only for upper limits?
+\end{framed}
+
+lorem ipsum
