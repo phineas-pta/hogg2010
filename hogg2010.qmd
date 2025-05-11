@@ -40,9 +40,11 @@ then put rsvg-convert.exe into <quarto path>\bin\tools
 
 # preliminary {.unnumbered}
 
-reference: **David W. Hogg**, **Jo Bovy**, **Dustin Lang**. 2010. *Data analysis recipes: Fitting a model to data*: <https://arxiv.org/pdf/1008.4686>
+reference: **David W. Hogg**, **Jo Bovy**, **Dustin Lang**. 2010. *Data analysis recipes: Fitting a model to data*
 
-source code: <https://github.com/davidwhogg/DataAnalysisRecipes/blob/master/straightline/straightline.tex>
+- paper: <https://arxiv.org/pdf/1008.4686>
+- source code: <https://github.com/davidwhogg/DataAnalysisRecipes/blob/master/straightline/straightline.tex>
+- lecture: <https://www.youtube.com/playlist?list=PLBB44462E5201DD1E>
 
 additional resources:
 
@@ -55,30 +57,30 @@ additional resources:
 - <https://github.com/nadanai263/fittingmodeltodata/blob/master/Fitting%20a%20model%20to%20data%20(Hogg%2C%20Bovy%2C%20Lang%202010).ipynb>
 - <https://github.com/Lachimax/hblfit/blob/main/notebooks/1-standard-practise.ipynb>
 
-data:
+data to be used throughout the tutorial:
 
-| $x$ | $y$ | $\sigma_y$ | $\sigma_x$ | $\rho_{xy}$ |
+| $x$ | $y$ | $\sigma_x$ | $\sigma_y$ | $\rho_{xy}$ |
 |----:|----:|-----------:|-----------:|------------:|
-| 201 | 592 |         61 |          9 |       -0.84 |
-| 244 | 401 |         25 |          4 |        0.31 |
-|  47 | 583 |         38 |         11 |        0.64 |
-| 287 | 402 |         15 |          7 |       -0.27 |
-| 203 | 495 |         21 |          5 |       -0.33 |
-|  58 | 173 |         15 |          9 |        0.67 |
-| 210 | 479 |         27 |          4 |       -0.02 |
-| 202 | 504 |         14 |          4 |       -0.05 |
-| 198 | 510 |         30 |         11 |       -0.84 |
-| 158 | 416 |         16 |          7 |       -0.69 |
-| 165 | 393 |         14 |          5 |        0.30 |
-| 201 | 442 |         25 |          5 |       -0.46 |
-| 157 | 317 |         52 |          5 |       -0.03 |
-| 131 | 311 |         16 |          6 |        0.50 |
-| 166 | 400 |         34 |          6 |        0.73 |
-| 160 | 337 |         31 |          5 |       -0.52 |
-| 186 | 423 |         42 |          9 |        0.90 |
-| 125 | 334 |         26 |          8 |        0.40 |
-| 218 | 533 |         16 |          6 |       -0.78 |
-| 146 | 344 |         22 |          5 |       -0.56 |
+| 201 | 592 |          9 |         61 |       -0.84 |
+| 244 | 401 |          4 |         25 |        0.31 |
+|  47 | 583 |         11 |         38 |        0.64 |
+| 287 | 402 |          7 |         15 |       -0.27 |
+| 203 | 495 |          5 |         21 |       -0.33 |
+|  58 | 173 |          9 |         15 |        0.67 |
+| 210 | 479 |          4 |         27 |       -0.02 |
+| 202 | 504 |          4 |         14 |       -0.05 |
+| 198 | 510 |         11 |         30 |       -0.84 |
+| 158 | 416 |          7 |         16 |       -0.69 |
+| 165 | 393 |          5 |         14 |        0.30 |
+| 201 | 442 |          5 |         25 |       -0.46 |
+| 157 | 317 |          5 |         52 |       -0.03 |
+| 131 | 311 |          6 |         16 |        0.50 |
+| 166 | 400 |          6 |         34 |        0.73 |
+| 160 | 337 |          5 |         31 |       -0.52 |
+| 186 | 423 |          9 |         42 |        0.90 |
+| 125 | 334 |          8 |         26 |        0.40 |
+| 218 | 533 |          6 |         16 |       -0.78 |
+| 146 | 344 |          5 |         22 |       -0.56 |
 
 The full uncertainty covariance matrix for each data point is given by $\left[\begin{array}{cc} \sigma_x^2 & \sigma_{xy} \\ \sigma_{xy} & \sigma_y^2\end{array}\right]$ with $\sigma_{xy}=\rho_{xy}\sigma_x\sigma_y$
 
@@ -88,11 +90,13 @@ prepare Julia environment
 import Pkg
 Pkg.add(["Turing", "StatsPlots", "LogExpFunctions"])
 ```
+
 data entry
 ```{julia}
 using Statistics: mean
 using LinearAlgebra: dot, diagm
-using Turing, LogExpFunctions, StatsPlots
+using LogExpFunctions: logaddexp
+using Turing, StatsPlots
 
 const N = 20;
 const x    = [201., 244.,  47., 287., 203.,  58., 210., 202., 198., 158., 165., 201., 157., 131., 166., 160., 186., 125., 218., 146.];
@@ -101,13 +105,30 @@ const σ_x  = [  9.,   4.,  11.,   7.,   5.,   9.,   4.,   4.,  11.,   7.,   5.,
 const σ_y  = [ 61.,  25.,  38.,  15.,  21.,  15.,  27.,  14.,  30.,  16.,  14.,  25.,  52.,  16.,  34.,  31.,  42.,  26.,  16.,  22.];
 const ρ_xy = [-.84,  .31,  .64, -.27, -.33,  .67, -.02, -.05, -.84, -.69,   .3, -.46, -.03,   .5,  .73, -.52,   .9,   .4, -.78, -.56];
 ```
+
 data points 5 through 20 in the table
 ```{julia}
+const subset_N = 16;
 const subset_x    =    x[5:end];
 const subset_y    =    y[5:end];
 const subset_σ_x  =  σ_x[5:end];
 const subset_σ_y  =  σ_y[5:end];
 const subset_ρ_xy = ρ_xy[5:end];
+```
+
+options to run MCMC chains
+```{julia}
+const N_samples = 5000;
+const N_chains = 4;
+const N_warmup = 1000;
+const N_thinning = 5;
+```
+
+helper functions
+```{julia}
+function print_uncertainty(x, δx; digits=2)
+	return "$(round(x; digits=digits)) ± $(round(δx; digits=digits))"
+end
 ```
 
 # Standard practice
@@ -137,29 +158,29 @@ $$
 $\left[\begin{array}{c} b \\ m \end{array}\right] = X = \left[A^\top\,C^{-1}\,A\right]^{-1}\,\left[A^\top\,C^{-1}\,Y\right]$ where m is the slope and b is the intercept
 
 ```{julia}
-Y = subset_y[:, :];
-A = hcat(ones(length(subset_x)), subset_x);
-C = diagm(subset_σ_y.^2);
+Yₑₓ₀₁ = subset_y[:, :];
+Aₑₓ₀₁ = hcat(ones(subset_N), subset_x);
+Cₑₓ₀₁ = diagm(subset_σ_y .^ 2);
 
-tmp = A' * inv(C);
-cov_bm = inv(tmp * A); # covariance matrix of b & m
-X = cov_bm * tmp * Y;
-b, m = X
+tmp = Aₑₓ₀₁' * inv(Cₑₓ₀₁); # intermediary result
+cov_bm = inv(tmp * Aₑₓ₀₁); # covariance matrix of b & m
+Xₑₓ₀₁ = cov_bm * tmp * Yₑₓ₀₁;
+bₑₓ₀₁, mₑₓ₀₁ = Xₑₓ₀₁;
 ```
 
 ```{julia}
-plot(subset_x, subset_y, yerror=subset_σ_y, seriestype=:scatter, label = "")
-plot!(x -> m*x + b, label = "")
+plot(subset_x, subset_y, yerror=subset_σ_y, seriestype=:scatter, label="")
+plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="")
 ```
 
-The “standard uncertainty variance” is to be found in the diagonals of the covariance matrix.
+The “standard uncertainty variance” is to be found in the diagonals of the matrix: $\left[\begin{array}{cc} \sigma_b^2 & \sigma_{mb} \\ \sigma_{mb} & \sigma_m^2\end{array}\right] = \left[A^\top\,C^{-1}\,A\right]^{-1}$
 ```{julia}
 cov_bm
 ```
 
 standard uncertainty (square root of variance) on b is `{julia} sqrt(cov_bm[1, 1])`, on m is `{julia} sqrt(cov_bm[2, 2])`
 
-*i.e.* $b=$ `{julia} b` $\pm$ `{julia} sqrt(cov_bm[1, 1])` and $m=$ `{julia} m` $\pm$ `{julia} sqrt(cov_bm[2, 2])`
+*i.e.* $b=$ `{julia} print_uncertainty(bₑₓ₀₁, sqrt(cov_bm[1, 1]))` and $m=$ `{julia} print_uncertainty(mₑₓ₀₁, sqrt(cov_bm[2, 2]))`
 
 ## exercise 02
 
@@ -170,24 +191,26 @@ Repeat exercise 01 but for all the data points in the table. What is the standar
 :::
 
 ```{julia}
-Y = y[:, :];
-A = hcat(ones(length(x)), x);
-C = diagm(σ_y.^2);
+Yₑₓ₀₂ = y[:, :];
+Aₑₓ₀₂ = hcat(ones(N), x);
+Cₑₓ₀₂ = diagm(σ_y .^ 2);
 
-tmp = A' * inv(C);
-cov_bm = inv(tmp * A); # covariance matrix of b & m
-X = cov_bm * tmp * Y;
-b, m = X
+tmp = Aₑₓ₀₂' * inv(Cₑₓ₀₂); # intermediary result
+cov_bm = inv(tmp * Aₑₓ₀₂); # covariance matrix of b & m
+Xₑₓ₀₂ = cov_bm * tmp * Yₑₓ₀₂;
+bₑₓ₀₂, mₑₓ₀₂ = Xₑₓ₀₂;
+
+plot(x, y, yerror=σ_y, seriestype=:scatter, label="")
+plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
+plot!(x -> mₑₓ₀₂*x + bₑₓ₀₂, label="exr 02")
 ```
 
-```{julia}
-plot(x, y, yerror=σ_y, seriestype=:scatter, label = "")
-plot!(x -> m*x + b, label = "")
-```
+new values for the fitted line: $b=$ `{julia} print_uncertainty(bₑₓ₀₂, sqrt(cov_bm[1, 1]))` and $m=$ `{julia} print_uncertainty(mₑₓ₀₂, sqrt(cov_bm[2, 2]))`
 
-the outliers drastically affect the fit: the slope is reduced by more than half and the intercept is adjusted by ~200 to compensate.
+the outliers drastically affect the fit:
 
-uncertainties actually decrease: on b is `{julia} sqrt(cov_bm[1, 1])`, on m is `{julia} sqrt(cov_bm[2, 2])`
+- the slope is reduced by more than half and the intercept is adjusted by ~200 to compensate.
+- uncertainties actually decrease
 
 ## exercise 03
 
@@ -198,22 +221,21 @@ Generalize the method of this section to fit a general quadratic (2nd order) rel
 :::
 
 ```{julia}
-Y = subset_y[:, :];
-A = hcat(ones(length(subset_x)), subset_x, subset_x.^2);
-C = diagm(subset_σ_y.^2);
+Yₑₓ₀₃ = subset_y[:, :];
+Aₑₓ₀₃ = hcat(ones(subset_N), subset_x, subset_x.^2);
+Cₑₓ₀₃ = diagm(subset_σ_y .^ 2);
 
-tmp = A' * inv(C);
-cov_bmq = inv(tmp * A); # covariance matrix of b, m & q
-X = cov_bmq * tmp * Y;
-b, m, q = X
+tmp = Aₑₓ₀₃' * inv(Cₑₓ₀₃); # intermediary result
+cov_bmq = inv(tmp * Aₑₓ₀₃); # covariance matrix of b, m & q
+Xₑₓ₀₃ = cov_bmq * tmp * Yₑₓ₀₃;
+bₑₓ₀₃, mₑₓ₀₃, qₑₓ₀₃ = Xₑₓ₀₃;
+
+plot(subset_x, subset_y, yerror=subset_σ_y, seriestype=:scatter, label="")
+plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
+plot!(x -> qₑₓ₀₃*x^2 + mₑₓ₀₃*x + bₑₓ₀₃, label="exr 03")
 ```
 
-```{julia}
-plot(subset_x, subset_y, yerror=subset_σ_y, seriestype=:scatter, label = "")
-plot!(x -> q*x^2 + m*x + b, label = "")
-```
-
-standard uncertainty on b is `{julia} sqrt(cov_bmq[1, 1])`, on m is `{julia} sqrt(cov_bmq[2, 2])`, on q is `{julia} sqrt(cov_bmq[3, 3])`
+$b=$ `{julia} print_uncertainty(bₑₓ₀₃, sqrt(cov_bmq[1, 1]))` and $m=$ `{julia} print_uncertainty(mₑₓ₀₃, sqrt(cov_bmq[2, 2]))` and $q=$ `{julia} print_uncertainty(qₑₓ₀₃, sqrt(cov_bmq[3, 3]); digits=4)`
 
 # The objective function
 
@@ -225,14 +247,19 @@ Imagine a set of $N$ measurements $t_i$, with uncertainty variances $\sigma_{t_i
 
 :::
 
-The Gaussian log-likelihood in this case is
+Gaussian likelihood:
 $$
-\ln{\mathcal{L}(t_i, \sigma_t\,|\,T)} = -\frac{N}{2}\ln(2\pi) - \frac{N}{2}\ln{\sigma_{t_i}^2} - \sum_{i=1}^N \frac{(t_i - T)^2}{2\sigma_{t_i}^2}
+\mathcal{L} = \prod_{i=1}^N \frac{1}{\sqrt{2\pi\sigma_{t_i}^2}} \exp{\frac{(t_i - T)^2}{2\sigma_{t_i}^2}}
 $$
 
-The derivative of this likelihood is
+log-likelihood: when we are faced with the situation of taking the product of (potentially many) values close to zero, it’s a good idea to take the logarithm and sum the values instead:
 $$
-\frac{\partial}{\partial T} \ln{\mathcal{L}(t_i, \sigma_t\,|\,T)} = -\frac{\partial}{\partial T} \sum_{i=1}^N \frac{(t_i - T)^2}{{2\sigma_{t_i}^2}} = \sum_{i=1}^N \frac{(t_i - T)}{\sigma_{t_i}^2}
+\log{\mathcal{L}} = -\frac{N}{2}\ln(2\pi) - \frac{N}{2}\ln{\sigma_{t_i}^2} - \sum_{i=1}^N \frac{(t_i - T)^2}{2\sigma_{t_i}^2} = \mathrm{K} - \frac{1}{2} \chi^2
+$$
+
+derivative:
+$$
+\frac{\partial \log{\mathcal{L}}}{\partial T} = -\frac{\partial}{\partial T} \sum_{i=1}^N \frac{(t_i - T)^2}{{2\sigma_{t_i}^2}} = \sum_{i=1}^N \frac{(t_i - T)}{\sigma_{t_i}^2}
 $$
 
 This takes its maximum when the derivative is $0$
@@ -277,54 +304,102 @@ And so $\hat{X} = \left(A^\top C^{-1}A\right)^{-1}A^\top C^{-1}Y$ As given in *e
 
 ::: {.callout-note}
 
-Using the mixture model proposed above — that treats the distribution as a mixture of a thin line containing a fraction $[1-P_{\mathrm{bad}}]$ of the points and a broader Gaussian containing a fraction $P_{\mathrm{bad}}$ of the points — find the best-fit (the maximum a posteriori) straight line $y=m\,x+b$ for the $x$, $y$, and $\sigma_y$ for the data. Before choosing the MAP line, marginalize over parameters $(P_{\mathrm{bad}},Y_{\mathrm{bad}},V_{\mathrm{bad}})$. That is, if you take a sampling approach, this means sampling the full 5-dimensional parameter space but then choosing the peak value in the histogram of samples in the two-dimensional parameter space $(m,b)$.  Make one plot showing this 2-dimensional histogram, and another showing the points, their uncertainties, and the MAP line. How does this compare to the standard result you obtained in exercise 02? Do you like the MAP line better or worse? For extra credit, plot a sampling of 10 lines drawn from the marginalized posterior distribution for $(m,b)$ (marginalized over $(P_{\mathrm{bad}},Y_{\mathrm{bad}},V_{\mathrm{bad}})$) and plot the samples as a set of light grey or ransparent lines.
+Using the mixture model proposed in the paper — that treats the distribution as a mixture of a thin line containing a fraction $[1-P_{\mathrm{bad}}]$ of the points and a broader Gaussian containing a fraction $P_{\mathrm{bad}}$ of the points — find the best-fit (the maximum a posteriori) straight line $y=m\,x+b$ for the $x$, $y$, and $\sigma_y$ for the data.
+
+Before choosing the MAP line, marginalize over parameters $(P_{\mathrm{bad}},Y_{\mathrm{bad}},V_{\mathrm{bad}})$. That is, if you take a sampling approach, this means sampling the full 5-dimensional parameter space but then choosing the peak value in the histogram of samples in the 2-dimensional parameter space $(m,b)$.
+
+Make one plot showing this 2-dimensional histogram, and another showing the points, their uncertainties, and the MAP line.
+
+How does this compare to the standard result you obtained in exercise 02? Do you like the MAP line better or worse?
+
+For extra credit, plot a sampling of 10 lines drawn from the marginalized posterior distribution for $(m,b)$ (marginalized over $(P_{\mathrm{bad}},Y_{\mathrm{bad}},V_{\mathrm{bad}})$) and plot the samples as a set of light grey or ransparent lines.
 
 :::
 
-We now model our data as being drawn from a mixture of two Gaussians, one which is the ‘true’ relation and one which is a distribution of outliers. This mixture model is generated by marginalising an ‘exponential’ model which contains $N$ latent classifying labels $q_i$ for each data point
+We now model our data as being drawn from a mixture of 2 Gaussians, one which is the ‘true’ relation and one which is a distribution of outliers. This mixture model is generated by marginalising an ‘exponential’ model which contains $N$ latent classifying labels $q_i$ for each data point
 $$
 \mathcal{L} \propto \prod_{i=1}^N\left[\frac{1-P_{\mathrm{bad}}}{\sqrt{2\pi\sigma_{y_i}^2}} \exp\left(-\frac{[y_i-mx_i-b]^2}{2\sigma_{y_i}^2}\right) + \frac{P_{\mathrm{bad}}}{\sqrt{2\pi[V_{\mathrm{bad}}+\sigma_{y_i}^2]}} \exp\left(-\frac{[y_i-Y_{\mathrm{bad}}]^2}{2[V_{\mathrm{bad}}+\sigma_{y_i}^2]}\right)\right]
 $$
 
 ```{julia}
-#| eval: false
-@model function hogg_model(x, y, σ_y)
+@model function hogg_model(N, x, y, σ_y)
 	b ~ Normal(0, 5)
 	m ~ Normal(0, 5)
 
-  # for outliers
-	𝒫_bad ~ Uniform(0, 1)
+	# for outliers
+	P_bad ~ Uniform(0, 1)
 	Y_bad ~ Normal(0, 10) # mean for all outliers
 	V_bad ~ InverseGamma(.001, .001) # additional variance for outliers
 
-	# faster gaussian mixture: marginalize discrete param
+	# faster computation: marginalize discrete param
 	for i ∈ 1:N
-		inlier  = log(1 - 𝒫_bad) + logpdf(Normal(b + m * x[i], σ_y[i]        ), y[i])
-		outlier = log(    𝒫_bad) + logpdf(Normal(Y_bad       , σ_y[i] + V_bad), y[i])
+		σ_bad = sqrt(σ_y[i]^2 + V_bad^2)
+		 inlier = log(1 - P_bad) + logpdf(Normal(b + m*x[i], σ_y[i]), y[i])
+		outlier = log(    P_bad) + logpdf(Normal(Y_bad     , σ_bad ), y[i])
 		Turing.@addlogprob! logaddexp(inlier, outlier)
 	end
 end
 
-chains_hogg = sample(
-	#= model & data =# hogg_model(x, y, σ_y),
-	#= sampler: no u turn =# NUTS(),
-	#= parallel type: threads =# MCMCThreads(),
-	#= N samples =# 50000,
-	#= N chains =# 4;
-	num_warmup = 10000,
-	thinning = 5
-)
+chains_hogg_full = sample(hogg_model(N, x, y, σ_y), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+```
+
+diagnostics of chains:
+```{julia}
+summarystats(chains_hogg_full)
+```
+
+all chains seem converged, we’re good!
+
+```{julia}
+histogram2d(chains_hogg_full[:b], chains_hogg_full[:m], bins=100, xlabel="b", ylabel="m")
+```
+
+```{julia}
+#| echo: false
+#| eval: false
+
+# plot(chains_hogg_full, seriestype=:mixeddensity) # cannot change layout
+
+p = plot(layout=(3, 2), legend=false)
+
+density!(p, chains_hogg_full[:b], subplot=1, title="b")
+density!(p, chains_hogg_full[:m], subplot=3, title="m")
+histogram2d!(p, chains_hogg_full[:b], chains_hogg_full[:m], subplot=5, bins=100, xlabel="b", ylabel="m")
+
+density!(p, chains_hogg_full[:Y_bad], subplot=2, label=false, title="Y_bad")
+density!(p, chains_hogg_full[:P_bad], subplot=4, label=false, title="P_bad")
+density!(p, chains_hogg_full[:V_bad], subplot=6, label=false, title="V_bad")
+```
+
+```{julia}
+bₑₓ₀₆ = mean(chains_hogg_full[:b]);
+mₑₓ₀₆ = mean(chains_hogg_full[:m]);
+plot(x, y, yerror=σ_y, seriestype=:scatter, label="")
+plot!(x -> mₑₓ₀₂*x + bₑₓ₀₂, label="exr 02")
+plot!(x -> mₑₓ₀₆*x + bₑₓ₀₆, label="exr 06")
 ```
 
 ## exercise 07
 
 ::: {.callout-note}
 
-Solve exercise 06 but now plot the fully marginalized (over $m,b,Y_{\mathrm{bad}},V_{\mathrm{bad}}$) posterior distribution function for parameter $P_{\mathrm{bad}}$. Is this distribution peaked about where you would expect, given the data? Now repeat the problem, but dividing all the data uncertainty variances $\sigma_{yi}^2$ by 4 (or dividing the uncertainties $\sigma_{yi}$ by 2). Again plot the fully marginalized posterior distribution function for parameter $P_{\mathrm{bad}}$. Discuss.
+Solve exercise 06 but now plot the fully marginalized (over $m,b,Y_{\mathrm{bad}},V_{\mathrm{bad}}$) posterior distribution function for parameter $P_{\mathrm{bad}}$. Is this distribution peaked about where you would expect, given the data?
+
+Now repeat the problem, but dividing all the data uncertainty variances $\sigma_{yi}^2$ by 4 (or dividing the uncertainties $\sigma_{yi}$ by 2). Again plot the fully marginalized posterior distribution function for parameter $P_{\mathrm{bad}}$. Discuss.
 
 :::
 
-lorem ipsum
+```{julia}
+density(chains_hogg_full[:P_bad], label=false, title="P_bad with original error")
+```
+peak at 0.2, arguably 3-4 outliers in the data, so it makes sense
+
+Now with ½ the error
+```{julia}
+chains_hogg_half_err = sample(hogg_model(N, x, y, σ_y ./ 2), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+density(chains_hogg_half_err[:P_bad], label=false, title="P_bad with half error")
+```
+meaning that many more points have been considered outliers
 
 # Uncertainties in the best-fit parameters
 
@@ -342,14 +417,28 @@ lorem ipsum
 
 ::: {.callout-note}
 
-Re-do exercise 06 — the mixture-based outlier model — but just with the “inlier” points 5 through 20 from the data. Then do the same again, but with all measurement uncertainties reduced by a factor of 2 (uncertainty variances reduced by a factor of 4). Plot the marginalized posterior probability distributions for line parameters $(m,b)$ in both cases. Did these posterior distributions
-get smaller or larger with the reduction in the data-point uncertainties? Compare this with the dependence of the standard uncertainty estimate $\left[A^\top\,C^{-1}\,A\right]^{-1}$.
+Re-do exercise 06 — the mixture-based outlier model — but just with the “inlier” points 5 through 20 from the data. Then do the same again, but with all measurement uncertainties reduced by a factor of 2 (uncertainty variances reduced by a factor of 4). Plot the marginalized posterior probability distributions for line parameters $(m,b)$ in both cases.
+
+Did these posterior distributions get smaller or larger with the reduction in the data-point uncertainties? Compare this with the dependence of the standard uncertainty estimate $\left[A^\top\,C^{-1}\,A\right]^{-1}$.
 
 :::
 
-lorem ipsum
+```{julia}
+chains_hogg_subset          = sample(hogg_model(subset_N, subset_x, subset_y, subset_σ_y),      NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+chains_hogg_subset_half_err = sample(hogg_model(subset_N, subset_x, subset_y, subset_σ_y ./ 2), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
 
-# Non-Gaussian uncertainties {#sec-non-Gaussian}
+p = plot(layout=2, legend=false)
+histogram2d!(p, chains_hogg_subset[:b],          chains_hogg_subset[:m],          subplot=1, bins=100, xlabel="b", ylabel="m", title="with original error")
+histogram2d!(p, chains_hogg_subset_half_err[:b], chains_hogg_subset_half_err[:m], subplot=2, bins=100, xlabel="b", ylabel="m", title="with half error")
+```
+
+The posterior distributions got much larger with the reduction in uncertainties. They’re way underestimated.
+
+If individual data-points have been estimated by some means that effectively relies on shared information, then there will be large covariances among the data points. These covariances bring off-diagonal elements into the covariance matrix $C$, which was previously trivially constructed under the assumption that all covariances are precisely $0$.
+
+Once the off-diagonal elements are non-zero, $\chi^2$ must be computed by the matrix expression: $\chi^2 = [Y-AX]^\top C^{-1}[Y-AX]$
+
+# Non-Gaussian uncertainties
 
 *no exercise in this section*
 
@@ -359,27 +448,72 @@ lorem ipsum
 
 ::: {.callout-note}
 
-Assess the $\chi^2$ value for the fit performed in exercise 01 (do that problem first if you haven’t already).  Is the fit good?  What about for the fit performed in exercise 02?
+Assess the $\chi^2$ value for the fit performed in exercise 01 (do that problem first if you haven’t already). Is the fit good?  What about for the fit performed in exercise 02?
 
 :::
 
-lorem ipsum
+```{julia}
+tmp = Yₑₓ₀₁ - Aₑₓ₀₁ * Xₑₓ₀₁; # intermediary result
+χ²ₑₓ₀₁ = tmp' * inv(Cₑₓ₀₁) * tmp;
+χ²ₑₓ₀₁ / (subset_N - 1) # χ² per degrees of freedom
+```
+This is a pretty good fit. Aside from the plot showing a linear fit that generally follows the points (whether the points themselves are linear or not), the reduced $\chi^2$ metric is pretty close to 1. This is indicating that on average the squared difference between my model and each point is roughly on par (actually slightly larger) than the measured inherent variance of each point. Can't ask for too much better than that when you're assuming the functional form of a distribution.
+
+```{julia}
+tmp = Yₑₓ₀₂ - Aₑₓ₀₂ * Xₑₓ₀₂; # intermediary result
+χ²ₑₓ₀₂ = tmp' * inv(Cₑₓ₀₂) * tmp;
+χ²ₑₓ₀₂ / (N - 1) # χ² per degrees of freedom
+```
+This is a horrid fit. Squared differences 15× larger than what’s described by measured variances.
 
 ## exercise 11
 
 ::: {.callout-note}
 
-Re-do the fit of exercise 01 but setting all $\sigma_{y_i}^2=S$, that is, ignoring the uncertainties and replacing them all with the same value $S$. What uncertainty variance $S$ would make $\chi^2 = N-2$?  How does it compare to the mean and median of the uncertainty variances $\left(\sigma_{y_i}^2\right)_{i=1}^N$?
+Re-do the fit of exercise 01 but setting all $\sigma_{y_i}^2=S$, that is, ignoring the uncertainties and replacing them all with the same value $S$. What uncertainty variance $S$ would make $\chi^2 = N-2$? How does it compare to the mean and median of the uncertainty variances $\left(\sigma_{y_i}^2\right)_{i=1}^N$?
 
 :::
 
-lorem ipsum
+```{julia}
+Yₑₓ₁₁ = subset_y[:, :];
+Aₑₓ₁₁ = hcat(ones(subset_N), subset_x);
+
+Sₑₓ₁₁ = 1:2000;
+χ²ₑₓ₁₁ = map(Sₑₓ₁₁) do s
+	σ²ₑₓ₁₁ = fill(s^2, subset_N)
+	Cₑₓ₁₁ = diagm(σ²ₑₓ₁₁)
+	tmp1 = inv(Cₑₓ₁₁)
+	tmp2 = Aₑₓ₁₁' * tmp1
+	Xₑₓ₁₁ = inv(tmp2 * Aₑₓ₁₁) * tmp2 * Yₑₓ₁₁
+	tmp3 = Yₑₓ₁₁ - Aₑₓ₁₁ * Xₑₓ₁₁
+	return only(tmp3' * tmp1 * tmp3) # get scalar from 1×1 matrix
+end
+
+subsetNm2 = subset_N - 2
+plot(Sₑₓ₁₁, χ²ₑₓ₁₁, seriestype=:scatter, yaxis=:log, xlabel="S", ylabel="χ²", label="")
+hline!([subsetNm2], label="χ²=N-2")
+```
+
+value S would be between:
+```{julia}
+χ²ₑₓ₁₁[χ²ₑₓ₁₁ .<= subsetNm2][begin]
+```
+and
+```{julia}
+χ²ₑₓ₁₁[χ²ₑₓ₁₁ .>= subsetNm2][end]
+```
+
+The uniform offset $S$ necessary to make $\chi^2 = N-2$ is quite larger than both the mean and median variances $\left(\sigma_{y_i}^2\right)_{i=1}^N$ of the true data set. If the data were in fact linear with some measurement uncertainties, perhaps the uncertainties themselves are underestimated.
 
 ## exercise 12
 
 ::: {.callout-note}
 
-Flesh out and write all equations for the Bayesian uncertainty estimation and marginalization procedure described in this section. Note that the inference and marginalization would be very expensive without excellent sampling tools! Make the additional (unjustified) assumption that all the uncertainties have the same variance $\sigma_{y_i}^2=S$ to make the problem tractable. Apply the method to the $x$ and $y$ values for points 5 through 20 in the data. Make a plot showing the points, the maximum a posteriori value of the uncertainty variance as error bars, and the maximum a posteriori straight line. For extra credit, plot 2 straight lines, one that is maximum a posteriori for the full posterior and one that is the same but for the posterior after the uncertainty variance $S$ has been marginalized out. Also plot 2 sets of error bars, one that shows the maximum for the full posterior and one for the posterior after the line parameters $(m,b)$ have been marginalized out.
+Flesh out and write all equations for the Bayesian uncertainty estimation and marginalization procedure described in this section. Note that the inference and marginalization would be very expensive without excellent sampling tools! Make the additional (unjustified) assumption that all the uncertainties have the same variance $\sigma_{y_i}^2=S$ to make the problem tractable.
+
+Apply the method to the $x$ and $y$ values for points 5 through 20 in the data. Make a plot showing the points, the maximum a posteriori value of the uncertainty variance as error bars, and the maximum a posteriori straight line.
+
+For extra credit, plot 2 straight lines, one that is maximum a posteriori for the full posterior and one that is the same but for the posterior after the uncertainty variance $S$ has been marginalized out. Also plot 2 sets of error bars, one that shows the maximum for the full posterior and one for the posterior after the line parameters $(m,b)$ have been marginalized out.
 
 :::
 
