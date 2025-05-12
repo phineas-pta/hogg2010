@@ -14,7 +14,9 @@ format:
     colorlinks: true
     documentclass: scrreprt
     papersize: a4
-    geometry: ["margin=1cm"]
+    geometry:
+    - margin=1cm
+    - footskip=5mm
     include-in-header:
       text: |
         \usepackage{fvextra}
@@ -22,7 +24,15 @@ format:
     include-before-body:
       text: |
         \RecustomVerbatimEnvironment{verbatim}{Verbatim}{showspaces=false,showtabs=false,breaksymbolleft={},breaklines}
-highlight-style: monokai
+  typst:
+    toc: true
+    number-sections: true
+    section-numbering: I.a.
+    papersize: a4
+    margin:
+      x: 1cm
+      y: 1cm
+highlight-style: vim-dark
 monofont: "Iosevka-Regular"
 code-line-numbers: true
 fig-align: center
@@ -94,7 +104,7 @@ Pkg.add(["Turing", "StatsPlots", "LogExpFunctions"])
 data entry
 ```{julia}
 using Statistics: mean
-using LinearAlgebra: dot, diagm
+using LinearAlgebra: diagm
 using LogExpFunctions: logaddexp
 using Turing, StatsPlots
 
@@ -158,7 +168,7 @@ $$
 $\left[\begin{array}{c} b \\ m \end{array}\right] = X = \left[A^\top\,C^{-1}\,A\right]^{-1}\,\left[A^\top\,C^{-1}\,Y\right]$ where m is the slope and b is the intercept
 
 ```{julia}
-Yₑₓ₀₁ = subset_y[:, :];
+Yₑₓ₀₁ = reshape(subset_y, :, 1); # vector to 1-column matrix
 Aₑₓ₀₁ = hcat(ones(subset_N), subset_x);
 Cₑₓ₀₁ = diagm(subset_σ_y .^ 2);
 
@@ -191,7 +201,7 @@ Repeat exercise 01 but for all the data points in the table. What is the standar
 :::
 
 ```{julia}
-Yₑₓ₀₂ = y[:, :];
+Yₑₓ₀₂ = reshape(y, :, 1); # vector to 1-column matrix
 Aₑₓ₀₂ = hcat(ones(N), x);
 Cₑₓ₀₂ = diagm(σ_y .^ 2);
 
@@ -221,7 +231,7 @@ Generalize the method of this section to fit a general quadratic (2nd order) rel
 :::
 
 ```{julia}
-Yₑₓ₀₃ = subset_y[:, :];
+Yₑₓ₀₃ = reshape(subset_y, :, 1); # vector to 1-column matrix
 Aₑₓ₀₃ = hcat(ones(subset_N), subset_x, subset_x.^2);
 Cₑₓ₀₃ = diagm(subset_σ_y .^ 2);
 
@@ -249,7 +259,7 @@ Imagine a set of $N$ measurements $t_i$, with uncertainty variances $\sigma_{t_i
 
 Gaussian likelihood:
 $$
-\mathcal{L} = \prod_{i=1}^N \frac{1}{\sqrt{2\pi\sigma_{t_i}^2}} \exp{\frac{(t_i - T)^2}{2\sigma_{t_i}^2}}
+\mathcal{L} = \prod_{i=1}^N \frac{1}{\sqrt{2\pi\sigma_{t_i}^2}} \exp{\left(- \frac{(t_i - T)^2}{2\sigma_{t_i}^2}\right)}
 $$
 
 log-likelihood: when we are faced with the situation of taking the product of (potentially many) values close to zero, it’s a good idea to take the logarithm and sum the values instead:
@@ -333,10 +343,14 @@ $$
 
 	# faster computation: marginalize discrete param
 	for i ∈ 1:N
-		σ_bad = sqrt(σ_y[i]^2 + V_bad^2)
+		σ_bad = sqrt(σ_y[i]^2 + V_bad)
+		#=
 		 inlier = log(1 - P_bad) + logpdf(Normal(b + m*x[i], σ_y[i]), y[i])
 		outlier = log(    P_bad) + logpdf(Normal(Y_bad     , σ_bad ), y[i])
 		Turing.@addlogprob! logaddexp(inlier, outlier)
+		=#
+		y[i] ~ MixtureModel(Normal, [(b + m*x[i], σ_y[i]), (Y_bad, σ_bad)], [1 - P_bad, P_bad]) # convenient constructors for mixture models
+
 	end
 end
 
@@ -347,11 +361,11 @@ diagnostics of chains:
 ```{julia}
 summarystats(chains_hogg_full)
 ```
-
 all chains seem converged, we’re good!
 
+good thing about MCMC is that it samples directly from marginalized distribution so no need to compute any integral after running
 ```{julia}
-histogram2d(chains_hogg_full[:b], chains_hogg_full[:m], bins=100, xlabel="b", ylabel="m")
+histogram2d(chains_hogg_full[:b], chains_hogg_full[:m], bins=N_samples÷10, color=:plasma, xlabel="b", ylabel="m")
 ```
 
 ```{julia}
@@ -364,7 +378,7 @@ p = plot(layout=(3, 2), legend=false)
 
 density!(p, chains_hogg_full[:b], subplot=1, title="b")
 density!(p, chains_hogg_full[:m], subplot=3, title="m")
-histogram2d!(p, chains_hogg_full[:b], chains_hogg_full[:m], subplot=5, bins=100, xlabel="b", ylabel="m")
+histogram2d!(p, chains_hogg_full[:b], chains_hogg_full[:m], subplot=5, bins=N_samples÷10, color=:plasma, xlabel="b", ylabel="m")
 
 density!(p, chains_hogg_full[:Y_bad], subplot=2, label=false, title="Y_bad")
 density!(p, chains_hogg_full[:P_bad], subplot=4, label=false, title="P_bad")
@@ -427,9 +441,9 @@ Did these posterior distributions get smaller or larger with the reduction in th
 chains_hogg_subset          = sample(hogg_model(subset_N, subset_x, subset_y, subset_σ_y),      NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
 chains_hogg_subset_half_err = sample(hogg_model(subset_N, subset_x, subset_y, subset_σ_y ./ 2), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
 
-p = plot(layout=2, legend=false)
-histogram2d!(p, chains_hogg_subset[:b],          chains_hogg_subset[:m],          subplot=1, bins=100, xlabel="b", ylabel="m", title="with original error")
-histogram2d!(p, chains_hogg_subset_half_err[:b], chains_hogg_subset_half_err[:m], subplot=2, bins=100, xlabel="b", ylabel="m", title="with half error")
+p = plot(layout=2)
+histogram2d!(p, chains_hogg_subset[:b],          chains_hogg_subset[:m],          subplot=1, bins=N_samples÷10, color=:plasma, xlabel="b", ylabel="m", title="with original error")
+histogram2d!(p, chains_hogg_subset_half_err[:b], chains_hogg_subset_half_err[:m], subplot=2, bins=N_samples÷10, color=:plasma, xlabel="b", ylabel="m", title="with half error")
 ```
 
 The posterior distributions got much larger with the reduction in uncertainties. They’re way underestimated.
@@ -475,12 +489,12 @@ Re-do the fit of exercise 01 but setting all $\sigma_{y_i}^2=S$, that is, ignori
 :::
 
 ```{julia}
-Yₑₓ₁₁ = subset_y[:, :];
+Yₑₓ₁₁ = reshape(subset_y, :, 1); # vector to 1-column matrix
 Aₑₓ₁₁ = hcat(ones(subset_N), subset_x);
 
 Sₑₓ₁₁ = 1:2000;
 χ²ₑₓ₁₁ = map(Sₑₓ₁₁) do s
-	σ²ₑₓ₁₁ = fill(s^2, subset_N)
+	σ²ₑₓ₁₁ = fill(s, subset_N)
 	Cₑₓ₁₁ = diagm(σ²ₑₓ₁₁)
 	tmp1 = inv(Cₑₓ₁₁)
 	tmp2 = Aₑₓ₁₁' * tmp1
@@ -496,11 +510,34 @@ hline!([subsetNm2], label="χ²=N-2")
 
 value S would be between:
 ```{julia}
-χ²ₑₓ₁₁[χ²ₑₓ₁₁ .<= subsetNm2][begin]
+Sₑₓ₁₁[findlast(x -> x > subsetNm2, χ²ₑₓ₁₁)]
 ```
 and
 ```{julia}
-χ²ₑₓ₁₁[χ²ₑₓ₁₁ .>= subsetNm2][end]
+Sₑₓ₁₁[findfirst(x -> x < subsetNm2, χ²ₑₓ₁₁)]
+```
+
+```{julia}
+#| echo: false
+
+Sₑₓ₁₁bis = 938:.01:939;
+χ²ₑₓ₁₁bis = map(Sₑₓ₁₁bis) do s
+	σ²ₑₓ₁₁ = fill(s, subset_N)
+	Cₑₓ₁₁ = diagm(σ²ₑₓ₁₁)
+	tmp1 = inv(Cₑₓ₁₁)
+	tmp2 = Aₑₓ₁₁' * tmp1
+	Xₑₓ₁₁ = inv(tmp2 * Aₑₓ₁₁) * tmp2 * Yₑₓ₁₁
+	tmp3 = Yₑₓ₁₁ - Aₑₓ₁₁ * Xₑₓ₁₁
+	return only(tmp3' * tmp1 * tmp3) # get scalar from 1×1 matrix
+end
+
+plot(Sₑₓ₁₁bis, χ²ₑₓ₁₁bis, seriestype=:scatter, xlabel="S", ylabel="χ²", label="")
+hline!([subsetNm2], label="χ²=N-2")
+```
+
+mean variances $\left(\sigma_{y_i}^2\right)_{i=1}^N$ of the true data set
+```{julia}
+mean(subset_σ_y .^ 2)
 ```
 
 The uniform offset $S$ necessary to make $\chi^2 = N-2$ is quite larger than both the mean and median variances $\left(\sigma_{y_i}^2\right)_{i=1}^N$ of the true data set. If the data were in fact linear with some measurement uncertainties, perhaps the uncertainties themselves are underestimated.
@@ -517,7 +554,30 @@ For extra credit, plot 2 straight lines, one that is maximum a posteriori for th
 
 :::
 
-lorem ipsum
+Gaussian likelihood:
+$$
+\mathcal{L} = \prod_{i=1}^N \frac{1}{\sqrt{2\pi\mathrm{S}}} \exp{\left(- \frac{(y_i - mx_i - b)^2}{2\mathrm{S}}\right)}
+$$
+```{julia}
+@model function same_σ_model(N, x, y)
+	b ~ Normal(0, 5)
+	m ~ Normal(0, 5)
+	S ~ InverseGamma(.001, .001) # common variance for all data
+
+	for i ∈ 1:N
+		y[i] ~ Normal(b + m*x[i], sqrt(S))
+	end
+end
+
+chains_same_σ = sample(same_σ_model(subset_N, subset_x, subset_y), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+
+bₑₓ₁₂ = mean(chains_same_σ[:b]);
+mₑₓ₁₂ = mean(chains_same_σ[:m]);
+Sₑₓ₁₂ = mean(chains_same_σ[:S]);
+plot(subset_x, subset_y, yerror=fill(sqrt(Sₑₓ₁₂), subset_N), seriestype=:scatter, label="")
+plot!(x -> mₑₓ₁₂*x + bₑₓ₁₂, label="exr 12")
+plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
+```
 
 # Arbitrary 2-dimensional uncertainties
 
@@ -536,8 +596,11 @@ lorem ipsum
 ::: {.callout-note}
 
 Repeat exercise 13, but using all of the data. Some of the points are now outliers, so your fit may look worse. Follow the fit by a robust procedure analogous to the Bayesian mixture model with bad-data
-probability $P_{\mathrm{bad}}$ described in section Pruning outliers. Use something sensible for the prior probability distribution for $(m,b)$. Plot the 2 results with the data and uncertainties. For extra credit, plot a sampling of 10 lines drawn from the marginalized posterior distribution for $(m,b)$ and plot the samples as a set of light grey or transparent lines. For extra extra credit, mark each
-data point on your plot with the fully marginalized probability that the point is bad (that is, rejected, or has $q=0$).
+probability $P_{\mathrm{bad}}$ described in section Pruning outliers. Use something sensible for the prior probability distribution for $(m,b)$.
+
+Plot the 2 results with the data and uncertainties.
+
+For extra credit, plot a sampling of 10 lines drawn from the marginalized posterior distribution for $(m,b)$ and plot the samples as a set of light grey or transparent lines. For extra extra credit, mark each data point on your plot with the fully marginalized probability that the point is bad (that is, rejected, or has $q=0$).
 
 :::
 
@@ -547,7 +610,13 @@ lorem ipsum
 
 ::: {.callout-note}
 
-Perform the abominable forward-reverse fitting procedure on points 5 through 20 from the data. That is, fit a straight line to the $y$ values of the points, using the $y$-direction uncertainties $\sigma_y^2$ only, by the standard method described in section Standard practice. Now transpose the problem and fit the same data but fitting the $x$ values using the $x$-direction uncertainties $\sigma_x^2$ only. Make a plot showing the data points, the $x$-direction and $y$-direction uncertainties, and the 2 best-fit lines. Comment.
+Perform the abominable forward-reverse fitting procedure on points 5 through 20 from the data.
+
+That is, fit a straight line to the $y$ values of the points, using the $y$-direction uncertainties $\sigma_y^2$ only, by the standard method described in section Standard practice.
+
+Now transpose the problem and fit the same data but fitting the $x$ values using the $x$-direction uncertainties $\sigma_x^2$ only.
+
+Make a plot showing the data points, the $x$-direction and $y$-direction uncertainties, and the 2 best-fit lines. Comment.
 
 :::
 
@@ -557,7 +626,9 @@ lorem ipsum
 
 ::: {.callout-note}
 
-Perform principal components analysis on points 5 through 20 from the data. That is, diagonalize the 2×2 matrix $Q$ given by $Q = \sum_{i=1}^N\,\left[Z_i-\bar{Z}\right]\,{\left[Z_i-\bar{Z}\right]}^\top$ with $\bar{Z} = \frac{1}{N}\,\sum_{i=1}^N\,Z_i$. Find the eigenvector of $Q$ with the largest eigenvalue. Now make a plot showing the data points, and the line that goes through the mean $\bar{Z}$ of the data with the slope corresponding to the direction of the principal eigenvector. Comment.
+Perform principal components analysis on points 5 through 20 from the data. That is, diagonalize the 2×2 matrix $Q$ given by $Q = \sum_{i=1}^N\,\left[Z_i-\bar{Z}\right]\,{\left[Z_i-\bar{Z}\right]}^\top$ with $\bar{Z} = \frac{1}{N}\,\sum_{i=1}^N\,Z_i$. Find the eigenvector of $Q$ with the largest eigenvalue.
+
+Now make a plot showing the data points, and the line that goes through the mean $\bar{Z}$ of the data with the slope corresponding to the direction of the principal eigenvector. Comment.
 
 :::
 
