@@ -42,6 +42,8 @@ jobs:
         with:
           path: hogg2010.qmd
       - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
 
   deploy:
     runs-on: ubuntu-latest
