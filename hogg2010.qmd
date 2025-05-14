@@ -1,22 +1,17 @@
 ---
-title: "solutions in Julia to the exercises in David Hogg’s 2010 tutorial paper on fitting a model to data"
+title: "solutions to the exercises in “Data analysis recipes: Fitting a model to data”"
+subtitle: "Julia implementation of solutions to the exercises in David Hogg’s 2010 tutorial paper on fitting a model to data"
 author: "PTA"
 license: "CC BY"
 engine: julia
-execute:
-  cache: true
 julia:
   exeflags: ["--threads=auto", "--project=."]
 format:
   pdf:
-    toc: true
-    number-sections: true
     colorlinks: true
     documentclass: scrreprt
     papersize: a4
-    geometry:
-    - margin=1cm
-    - footskip=5mm
+    geometry: ["margin=1cm", "footskip=5mm"]
     include-in-header:
       text: |
         \usepackage{fvextra}
@@ -24,16 +19,20 @@ format:
     include-before-body:
       text: |
         \RecustomVerbatimEnvironment{verbatim}{Verbatim}{showspaces=false,showtabs=false,breaksymbolleft={},breaklines}
-  typst:
-    toc: true
-    number-sections: true
-    section-numbering: I.a.
-    papersize: a4
-    margin:
-      x: 1cm
-      y: 1cm
+    monofont: "Iosevka-Regular"
+  html:
+    page-layout: full
+    toc-location: left-body
+    theme: journal
+    title-block-banner: true
+    anchor-sections: false
+    smooth-scroll: true
+    code-fold: show
+    code-copy: true
+    output-file: index.html
+toc: true
+number-sections: true
 highlight-style: vim-dark
-monofont: "Iosevka-Regular"
 code-line-numbers: true
 fig-align: center
 callout-appearance: minimal
@@ -42,7 +41,7 @@ callout-appearance: minimal
 <!--
 use fvextra to break long line in code block
 
-to use local fonts, they must be installed at system level, i.e. C:\Windows\Fonts
+to use local fonts, they must be installed at system level, e.g. C:\Windows\Fonts
 
 in windows to show plot: download https://sourceforge.net/projects/tumagcc/files/rsvg-convert-2.40.20.7z/download
 then put rsvg-convert.exe into <quarto path>\bin\tools
@@ -50,13 +49,17 @@ then put rsvg-convert.exe into <quarto path>\bin\tools
 
 # preliminary {.unnumbered}
 
+source code of this document: <https://github.com/phineas-pta/hogg2010/blob/main/hogg2010.qmd>
+
+## references & resources {.unnumbered}
+
 reference: **David W. Hogg**, **Jo Bovy**, **Dustin Lang**. 2010. *Data analysis recipes: Fitting a model to data*
 
 - paper: <https://arxiv.org/pdf/1008.4686>
 - source code: <https://github.com/davidwhogg/DataAnalysisRecipes/blob/master/straightline/straightline.tex>
 - lecture: <https://www.youtube.com/playlist?list=PLBB44462E5201DD1E>
 
-additional resources:
+additional resources: various Python implementations, but often not all exercises are solved
 
 - <https://astrowizici.st/teaching/phs5000/>
 - <https://www.pymc.io/projects/examples/en/latest/generalized_linear_models/GLM-robust-with-outlier-detection.html>
@@ -66,6 +69,8 @@ additional resources:
 - <https://github.com/jimbarrett27/hogg2010/blob/master/solutions.ipynb>
 - <https://github.com/nadanai263/fittingmodeltodata/blob/master/Fitting%20a%20model%20to%20data%20(Hogg%2C%20Bovy%2C%20Lang%202010).ipynb>
 - <https://github.com/Lachimax/hblfit/blob/main/notebooks/1-standard-practise.ipynb>
+
+## data {.unnumbered}
 
 data to be used throughout the tutorial:
 
@@ -92,38 +97,43 @@ data to be used throughout the tutorial:
 | 218 | 533 |          6 |         16 |       -0.78 |
 | 146 | 344 |          5 |         22 |       -0.56 |
 
-The full uncertainty covariance matrix for each data point is given by $\left[\begin{array}{cc} \sigma_x^2 & \sigma_{xy} \\ \sigma_{xy} & \sigma_y^2\end{array}\right]$ with $\sigma_{xy}=\rho_{xy}\sigma_x\sigma_y$
+The full uncertainty covariance matrix for each data point is given by $\begin{bmatrix} \sigma_x^2 & \sigma_{xy} \\ \sigma_{xy} & \sigma_y^2 \end{bmatrix}$ with $\sigma_{xy}=\rho_{xy}\sigma_x\sigma_y$
 
-prepare Julia environment
+given the authors’ academic background, those data have very likely astrophysics origin (each measure of x & y has uncertainties & correlation) with some additional tweaking
+
+## prepare Julia environment {.unnumbered}
+
 ```{julia}
 #| eval: false
 import Pkg
 Pkg.add(["Turing", "StatsPlots", "LogExpFunctions"])
 ```
 
-data entry
 ```{julia}
 using Statistics: mean
-using LinearAlgebra: diagm
-using LogExpFunctions: logaddexp
+using LinearAlgebra: dot, diagm
+using LogExpFunctions: logaddexp, logsumexp
 using Turing, StatsPlots
+```
 
-const N = 20;
-const x    = [201., 244.,  47., 287., 203.,  58., 210., 202., 198., 158., 165., 201., 157., 131., 166., 160., 186., 125., 218., 146.];
-const y    = [592., 401., 583., 402., 495., 173., 479., 504., 510., 416., 393., 442., 317., 311., 400., 337., 423., 334., 533., 344.];
-const σ_x  = [  9.,   4.,  11.,   7.,   5.,   9.,   4.,   4.,  11.,   7.,   5.,   5.,   5.,   6.,   6.,   5.,   9.,   8.,   6.,   5.];
-const σ_y  = [ 61.,  25.,  38.,  15.,  21.,  15.,  27.,  14.,  30.,  16.,  14.,  25.,  52.,  16.,  34.,  31.,  42.,  26.,  16.,  22.];
-const ρ_xy = [-.84,  .31,  .64, -.27, -.33,  .67, -.02, -.05, -.84, -.69,   .3, -.46, -.03,   .5,  .73, -.52,   .9,   .4, -.78, -.56];
+data entry
+```{julia}
+const full_N = 20;
+const full_x    = [201., 244.,  47., 287., 203.,  58., 210., 202., 198., 158., 165., 201., 157., 131., 166., 160., 186., 125., 218., 146.];
+const full_y    = [592., 401., 583., 402., 495., 173., 479., 504., 510., 416., 393., 442., 317., 311., 400., 337., 423., 334., 533., 344.];
+const full_σ_x  = [  9.,   4.,  11.,   7.,   5.,   9.,   4.,   4.,  11.,   7.,   5.,   5.,   5.,   6.,   6.,   5.,   9.,   8.,   6.,   5.];
+const full_σ_y  = [ 61.,  25.,  38.,  15.,  21.,  15.,  27.,  14.,  30.,  16.,  14.,  25.,  52.,  16.,  34.,  31.,  42.,  26.,  16.,  22.];
+const full_ρ_xy = [-.84,  .31,  .64, -.27, -.33,  .67, -.02, -.05, -.84, -.69,   .3, -.46, -.03,   .5,  .73, -.52,   .9,   .4, -.78, -.56];
 ```
 
 data points 5 through 20 in the table
 ```{julia}
 const subset_N = 16;
-const subset_x    =    x[5:end];
-const subset_y    =    y[5:end];
-const subset_σ_x  =  σ_x[5:end];
-const subset_σ_y  =  σ_y[5:end];
-const subset_ρ_xy = ρ_xy[5:end];
+const subset_x    = full_x[   5:end];
+const subset_y    = full_y[   5:end];
+const subset_σ_x  = full_σ_x[ 5:end];
+const subset_σ_y  = full_σ_y[ 5:end];
+const subset_ρ_xy = full_ρ_xy[5:end];
 ```
 
 options to run MCMC chains
@@ -132,6 +142,7 @@ const N_samples = 5000;
 const N_chains = 4;
 const N_warmup = 1000;
 const N_thinning = 5;
+const N_bins = max(isqrt(N_samples), N_samples ÷ 10); # in histogram
 ```
 
 helper functions
@@ -139,9 +150,49 @@ helper functions
 function print_uncertainty(x, δx; digits=2)
 	return "$(round(x; digits=digits)) ± $(round(δx; digits=digits))"
 end
+
+function plot_ellipses(N, x, y, σ_x, σ_y, ρ_xy)
+	p = plot(x, y, seriestype=:scatter, label="")
+	for i ∈ 1:N
+		z_i = [x[i], y[i]]
+		cov_xy_i = ρ_xy[i] * σ_x[i] * σ_y[i]
+		S_i = [σ_x[i]^2 cov_xy_i; cov_xy_i σ_y[i]^2]
+		covellipse!(p, z_i, S_i, label="")
+	end
+	return p
+end
+```
+
+quick look at data
+```{julia}
+plot(full_x, full_y, xerror=full_σ_x, yerror=full_σ_y, seriestype=:scatter, label="")
+```
+
+```{julia}
+plot_ellipses(full_N, full_x, full_y, full_σ_x, full_σ_y, full_ρ_xy)
 ```
 
 # Standard practice
+
+## quick summary
+
+conventional method for fitting a straight line $y=m\,x+b$ to data points where only the y-values have known Gaussian uncertainties
+
+Construct the matrices:
+$$
+Y = \begin{bmatrix} y_1 \\ y_2 \\ \vdots \\ y_N \end{bmatrix}
+\quad
+A = \begin{bmatrix} 1 & x_1 \\ 1 & x_2 \\ \vdots & \vdots \\ 1 & x_N \end{bmatrix}
+\quad
+C = \begin{bmatrix}
+\sigma_{y_1}^{2} & 0                & \cdots & 0 \\
+0                & \sigma_{y_2}^{2} & \cdots & 0 \\
+\vdots           & \vdots           & \ddots & \vdots \\
+0                & 0                & \cdots & \sigma_{y_N}^{2}
+\end{bmatrix}
+$$
+
+best-fit slope $m$ and intercept $b$ is given by: $\begin{bmatrix} b \\ m \end{bmatrix} = X = \left[A^\top\,C^{-1}\,A\right]^{-1}\,\left[A^\top\,C^{-1}\,Y\right]$
 
 ## exercise 01
 
@@ -150,22 +201,6 @@ end
 Using the standard linear algebra method, fit the straight line $y=m\,x+b$ to the $x$, $y$, and $\sigma_y$ values for data points 5 through 20 in the table. That is, ignore the first 4 data points, and also ignore the columns for $\sigma_x$ and $\rho_{xy}$. Make a plot showing the points, their uncertainties, and the best-fit line. What is the standard uncertainty variance $\sigma_m^2$ on the slope of the line?
 
 :::
-
-Construct the matrices:
-$$
-Y = \left[\begin{array}{c} y_1 \\ y_2 \\ \cdots \\ y_N \end{array}\right]
-\quad
-A = \left[\begin{array}{cc} 1 & x_1 \\ 1 & x_2 \\ \cdots & \cdots \\ 1 & x_N \end{array}\right]
-\quad
-C = \left[\begin{array}{cccc}
-\sigma_{y_1}^{2} & 0 & \cdots & 0 \\
-0 & \sigma_{y_2}^{2} & \cdots & 0 \\
-\cdots & \cdots & \cdots & \cdots \\
-0 & 0 & \cdots & \sigma_{y_N}^{2}
-\end{array}\right]
-$$
-
-$\left[\begin{array}{c} b \\ m \end{array}\right] = X = \left[A^\top\,C^{-1}\,A\right]^{-1}\,\left[A^\top\,C^{-1}\,Y\right]$ where m is the slope and b is the intercept
 
 ```{julia}
 Yₑₓ₀₁ = reshape(subset_y, :, 1); # vector to 1-column matrix
@@ -183,7 +218,7 @@ plot(subset_x, subset_y, yerror=subset_σ_y, seriestype=:scatter, label="")
 plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="")
 ```
 
-The “standard uncertainty variance” is to be found in the diagonals of the matrix: $\left[\begin{array}{cc} \sigma_b^2 & \sigma_{mb} \\ \sigma_{mb} & \sigma_m^2\end{array}\right] = \left[A^\top\,C^{-1}\,A\right]^{-1}$
+The “standard uncertainty variance” is to be found in the diagonals of the matrix: $\begin{bmatrix} \sigma_b^2 & \sigma_{mb} \\ \sigma_{mb} & \sigma_m^2 \end{bmatrix} = \left[A^\top\,C^{-1}\,A\right]^{-1}$
 ```{julia}
 cov_bm
 ```
@@ -201,16 +236,16 @@ Repeat exercise 01 but for all the data points in the table. What is the standar
 :::
 
 ```{julia}
-Yₑₓ₀₂ = reshape(y, :, 1); # vector to 1-column matrix
-Aₑₓ₀₂ = hcat(ones(N), x);
-Cₑₓ₀₂ = diagm(σ_y .^ 2);
+Yₑₓ₀₂ = reshape(full_y, :, 1); # vector to 1-column matrix
+Aₑₓ₀₂ = hcat(ones(full_N), full_x);
+Cₑₓ₀₂ = diagm(full_σ_y .^ 2);
 
 tmp = Aₑₓ₀₂' * inv(Cₑₓ₀₂); # intermediary result
 cov_bm = inv(tmp * Aₑₓ₀₂); # covariance matrix of b & m
 Xₑₓ₀₂ = cov_bm * tmp * Yₑₓ₀₂;
 bₑₓ₀₂, mₑₓ₀₂ = Xₑₓ₀₂;
 
-plot(x, y, yerror=σ_y, seriestype=:scatter, label="")
+plot(full_x, full_y, yerror=full_σ_y, seriestype=:scatter, label="")
 plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
 plot!(x -> mₑₓ₀₂*x + bₑₓ₀₂, label="exr 02")
 ```
@@ -248,6 +283,12 @@ plot!(x -> qₑₓ₀₃*x^2 + mₑₓ₀₃*x + bₑₓ₀₃, label="exr 03")
 $b=$ `{julia} print_uncertainty(bₑₓ₀₃, sqrt(cov_bmq[1, 1]))` and $m=$ `{julia} print_uncertainty(mₑₓ₀₃, sqrt(cov_bmq[2, 2]))` and $q=$ `{julia} print_uncertainty(qₑₓ₀₃, sqrt(cov_bmq[3, 3]); digits=4)`
 
 # The objective function
+
+## quick summary
+
+objective function: to measure how well a model fits the data → optimize this function to find best-fit model
+
+for the standard line-fitting case (Gaussian errors in y), best-fit model = maximizing the likelihood of observing the data given the line parameters $(m, b)$ which also minimizes the $\chi^2$ value, which represents the weighted sum of squared differences between the data and the fitted line
 
 ## exercise 04
 
@@ -310,6 +351,25 @@ And so $\hat{X} = \left(A^\top C^{-1}A\right)^{-1}A^\top C^{-1}Y$ As given in *e
 
 # Pruning outliers
 
+## quick summary
+
+importance of modeling outliers (data points that don’t fit the assumed model) rather than simply ignoring them
+
+one of the well-known methods to deal with outliers: sigma clipping (iteratively removing points 1σ/3σ/5σ far from the fit then re-fit then remove until stable) → a procedure which works very well but doesn’t an objective function top be optimized, so not statiscally justifiable
+
+authors’ proposition: mixture model
+
+- outliers come from a distribution with probability $P_{\mathrm{bad}}$, example of distribution: $\mathcal{N}\left(Y_{\mathrm{bad}},V_{\mathrm{bad}}\right)$
+- inliers come from straight line with probability $1-P_{\mathrm{bad}}$, therefore distribution: $\mathcal{N}\left(mx_i+b,\sigma_{y_i}^2\right)$
+
+We now model our data as being drawn from a mixture of 2 Gaussians, one which is the ‘true’ relation and one which is a distribution of outliers. This mixture model is generated by marginalising an ‘exponential’ model which contains $N$ latent classifying labels $q_i$ for each data point
+$$
+\mathcal{L} \propto \prod_{i=1}^N\left[
+\frac{1-P_{\mathrm{bad}}}{\sqrt{2\pi\sigma_{y_i}^2}} \exp\left(-\frac{[y_i-mx_i-b]^2}{2\sigma_{y_i}^2}\right) +
+\frac{P_{\mathrm{bad}}}{\sqrt{2\pi[V_{\mathrm{bad}}+\sigma_{y_i}^2]}} \exp\left(-\frac{[y_i-Y_{\mathrm{bad}}]^2}{2[V_{\mathrm{bad}}+\sigma_{y_i}^2]}\right)
+\right]
+$$
+
 ## exercise 06
 
 ::: {.callout-note}
@@ -326,13 +386,8 @@ For extra credit, plot a sampling of 10 lines drawn from the marginalized poster
 
 :::
 
-We now model our data as being drawn from a mixture of 2 Gaussians, one which is the ‘true’ relation and one which is a distribution of outliers. This mixture model is generated by marginalising an ‘exponential’ model which contains $N$ latent classifying labels $q_i$ for each data point
-$$
-\mathcal{L} \propto \prod_{i=1}^N\left[\frac{1-P_{\mathrm{bad}}}{\sqrt{2\pi\sigma_{y_i}^2}} \exp\left(-\frac{[y_i-mx_i-b]^2}{2\sigma_{y_i}^2}\right) + \frac{P_{\mathrm{bad}}}{\sqrt{2\pi[V_{\mathrm{bad}}+\sigma_{y_i}^2]}} \exp\left(-\frac{[y_i-Y_{\mathrm{bad}}]^2}{2[V_{\mathrm{bad}}+\sigma_{y_i}^2]}\right)\right]
-$$
-
 ```{julia}
-@model function hogg_model(N, x, y, σ_y)
+@model function model_exr06(N, x, y, σ_y)
 	b ~ Normal(0, 5)
 	m ~ Normal(0, 5)
 
@@ -343,52 +398,57 @@ $$
 
 	# faster computation: marginalize discrete param
 	for i ∈ 1:N
+		ŷ_i = b + m * x[i]
 		σ_bad = sqrt(σ_y[i]^2 + V_bad)
+
+		## method 1: manually modify log likehood
 		#=
-		 inlier = log(1 - P_bad) + logpdf(Normal(b + m*x[i], σ_y[i]), y[i])
-		outlier = log(    P_bad) + logpdf(Normal(Y_bad     , σ_bad ), y[i])
+		 inlier = log(1 - P_bad) + logpdf(Normal(ŷ_i  , σ_y[i]), y[i])
+		outlier = log(    P_bad) + logpdf(Normal(Y_bad, σ_bad ), y[i])
 		Turing.@addlogprob! logaddexp(inlier, outlier)
 		=#
-		y[i] ~ MixtureModel(Normal, [(b + m*x[i], σ_y[i]), (Y_bad, σ_bad)], [1 - P_bad, P_bad]) # convenient constructors for mixture models
+
+		## medthod 2: use convenient constructors for mixture models
+		y[i] ~ MixtureModel(Normal, [(ŷ_i, σ_y[i]), (Y_bad, σ_bad)], [1 - P_bad, P_bad])
 
 	end
 end
 
-chains_hogg_full = sample(hogg_model(N, x, y, σ_y), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+chains_exr06 = sample(model_exr06(full_N, full_x, full_y, full_σ_y), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
 ```
 
 diagnostics of chains:
 ```{julia}
-summarystats(chains_hogg_full)
+gelmandiag(chains_exr06)
 ```
 all chains seem converged, we’re good!
 
 good thing about MCMC is that it samples directly from marginalized distribution so no need to compute any integral after running
 ```{julia}
-histogram2d(chains_hogg_full[:b], chains_hogg_full[:m], bins=N_samples÷10, color=:plasma, xlabel="b", ylabel="m")
+histogram2d(chains_exr06[:b], chains_exr06[:m], bins=N_bins, normalize=:pdf, color=:plasma, xlabel="b", ylabel="m")
 ```
 
 ```{julia}
 #| echo: false
 #| eval: false
 
-# plot(chains_hogg_full, seriestype=:mixeddensity) # cannot change layout
+# plot(chains_exr06, seriestype=:mixeddensity) # cannot change layout
 
 p = plot(layout=(3, 2), legend=false)
 
-density!(p, chains_hogg_full[:b], subplot=1, title="b")
-density!(p, chains_hogg_full[:m], subplot=3, title="m")
-histogram2d!(p, chains_hogg_full[:b], chains_hogg_full[:m], subplot=5, bins=N_samples÷10, color=:plasma, xlabel="b", ylabel="m")
+density!(p, chains_exr06[:b], subplot=1, title="b")
+density!(p, chains_exr06[:m], subplot=3, title="m")
+histogram2d!(p, chains_exr06[:b], chains_exr06[:m], subplot=5, bins=N_bins, normalize=:pdf, color=:plasma, xlabel="b", ylabel="m")
 
-density!(p, chains_hogg_full[:Y_bad], subplot=2, label=false, title="Y_bad")
-density!(p, chains_hogg_full[:P_bad], subplot=4, label=false, title="P_bad")
-density!(p, chains_hogg_full[:V_bad], subplot=6, label=false, title="V_bad")
+density!(p, chains_exr06[:Y_bad], subplot=2, label=false, title="Y_bad")
+density!(p, chains_exr06[:P_bad], subplot=4, label=false, title="P_bad")
+density!(p, chains_exr06[:V_bad], subplot=6, label=false, title="V_bad")
 ```
 
 ```{julia}
-bₑₓ₀₆ = mean(chains_hogg_full[:b]);
-mₑₓ₀₆ = mean(chains_hogg_full[:m]);
-plot(x, y, yerror=σ_y, seriestype=:scatter, label="")
+bₑₓ₀₆ = mean(chains_exr06[:b]);
+mₑₓ₀₆ = mean(chains_exr06[:m]);
+plot(full_x, full_y, yerror=full_σ_y, seriestype=:scatter, label="")
 plot!(x -> mₑₓ₀₂*x + bₑₓ₀₂, label="exr 02")
 plot!(x -> mₑₓ₀₆*x + bₑₓ₀₆, label="exr 06")
 ```
@@ -404,18 +464,60 @@ Now repeat the problem, but dividing all the data uncertainty variances $\sigma_
 :::
 
 ```{julia}
-density(chains_hogg_full[:P_bad], label=false, title="P_bad with original error")
+density(chains_exr06[:P_bad], label=false, title="P_bad with original error")
 ```
 peak at 0.2, arguably 3-4 outliers in the data, so it makes sense
 
 Now with ½ the error
 ```{julia}
-chains_hogg_half_err = sample(hogg_model(N, x, y, σ_y ./ 2), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
-density(chains_hogg_half_err[:P_bad], label=false, title="P_bad with half error")
+chains_exr07 = sample(model_exr06(full_N, full_x, full_y, full_σ_y ./ 2), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+density(chains_exr07[:P_bad], label=false, title="P_bad with half error")
 ```
 meaning that many more points have been considered outliers
 
+## little extra
+
+compute probability of each point to be classified as outlier
+
+```{julia}
+# Compute the un-normalized log probabilities for each cluster
+log_prob_assign_outliers = zeros(N_chains, N_samples, full_N);
+Threads.@threads for step ∈ 1:N_samples
+	for chain ∈ 1:N_chains
+		b = chains_exr06[:b][step, chain]
+		m = chains_exr06[:m][step, chain]
+		V_bad = chains_exr06[:V_bad][step, chain]
+		P_bad = chains_exr06[:P_bad][step, chain]
+		Y_bad = chains_exr06[:Y_bad][step, chain]
+		for i ∈ 1:full_N
+			ŷ_i = b + m * full_x[i]
+			inliers_log_prob = log(1 - P_bad) + logpdf(Normal(ŷ_i, full_σ_y[i]), full_y[i])
+
+			σ_bad_i = sqrt(full_σ_y[i]^2 + V_bad)
+			outliers_log_prob = log(P_bad) + logpdf(Normal(Y_bad, σ_bad_i), full_y[i])
+
+			# Bayes rule to compute the assignment probability: P(cluster = 1 | data) ∝ P(data | cluster = 1) P(cluster = 1)
+			log_prob_assign_outliers[chain, step, i] = outliers_log_prob - logaddexp(inliers_log_prob, outliers_log_prob)
+		end
+	end
+end
+
+log_prob_assign_outliers_bis = dropdims(logsumexp(log_prob_assign_outliers; dims=2); dims=2); # shape: N_chains × N
+proba_outlier = exp.(log_prob_assign_outliers_bis .- log(N_samples));
+
+# Average across the MCMC chain
+for proba ∈ mean(proba_outlier; dims=1)
+	println("$(round(100*proba; digits=2)) %")
+end
+```
+
 # Uncertainties in the best-fit parameters
+
+## quick summary
+
+This brief section reiterates how to determine the uncertainties (often represented by a covariance matrix) associated with the best-fit parameters obtained from the fitting process.
+
+It stresses that the validity of these uncertainty estimates depends heavily on the correctness of the initial assumptions about the data’s error properties and the appropriateness of the model itself.
 
 ## exercise 08
 
@@ -438,12 +540,12 @@ Did these posterior distributions get smaller or larger with the reduction in th
 :::
 
 ```{julia}
-chains_hogg_subset          = sample(hogg_model(subset_N, subset_x, subset_y, subset_σ_y),      NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
-chains_hogg_subset_half_err = sample(hogg_model(subset_N, subset_x, subset_y, subset_σ_y ./ 2), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+chains_hogg_subset          = sample(model_exr06(subset_N, subset_x, subset_y, subset_σ_y),      NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+chains_hogg_subset_half_err = sample(model_exr06(subset_N, subset_x, subset_y, subset_σ_y ./ 2), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
 
 p = plot(layout=2)
-histogram2d!(p, chains_hogg_subset[:b],          chains_hogg_subset[:m],          subplot=1, bins=N_samples÷10, color=:plasma, xlabel="b", ylabel="m", title="with original error")
-histogram2d!(p, chains_hogg_subset_half_err[:b], chains_hogg_subset_half_err[:m], subplot=2, bins=N_samples÷10, color=:plasma, xlabel="b", ylabel="m", title="with half error")
+histogram2d!(p, chains_hogg_subset[:b],          chains_hogg_subset[:m],          subplot=1, bins=N_bins, normalize=:pdf, color=:plasma, xlabel="b", ylabel="m", title="with original error")
+histogram2d!(p, chains_hogg_subset_half_err[:b], chains_hogg_subset_half_err[:m], subplot=2, bins=N_bins, normalize=:pdf, color=:plasma, xlabel="b", ylabel="m", title="with half error")
 ```
 
 The posterior distributions got much larger with the reduction in uncertainties. They’re way underestimated.
@@ -456,7 +558,15 @@ Once the off-diagonal elements are non-zero, $\chi^2$ must be computed by the ma
 
 *no exercise in this section*
 
+quick summary: can somehow model as gaussian anyway …
+
 # Goodness of fit and unknown uncertainties
+
+## quick summary
+
+standard (frequentist) paradigm: $\chi^2$ to measure goodness of fit
+
+with a straight line: $\chi^2$ expect to be in between $[N-2] \pm \sqrt{2[N-2]}$ with 2 is model parameters count ($m$ & $b$)
 
 ## exercise 10
 
@@ -476,7 +586,7 @@ This is a pretty good fit. Aside from the plot showing a linear fit that general
 ```{julia}
 tmp = Yₑₓ₀₂ - Aₑₓ₀₂ * Xₑₓ₀₂; # intermediary result
 χ²ₑₓ₀₂ = tmp' * inv(Cₑₓ₀₂) * tmp;
-χ²ₑₓ₀₂ / (N - 1) # χ² per degrees of freedom
+χ²ₑₓ₀₂ / (full_N - 1) # χ² per degrees of freedom
 ```
 This is a horrid fit. Squared differences 15× larger than what’s described by measured variances.
 
@@ -535,10 +645,7 @@ plot(Sₑₓ₁₁bis, χ²ₑₓ₁₁bis, seriestype=:scatter, xlabel="S", yla
 hline!([subsetNm2], label="χ²=N-2")
 ```
 
-mean variances $\left(\sigma_{y_i}^2\right)_{i=1}^N$ of the true data set
-```{julia}
-mean(subset_σ_y .^ 2)
-```
+mean variances $\left(\sigma_{y_i}^2\right)_{i=1}^N$ of the true data set: `{julia} mean(subset_σ_y .^ 2)`
 
 The uniform offset $S$ necessary to make $\chi^2 = N-2$ is quite larger than both the mean and median variances $\left(\sigma_{y_i}^2\right)_{i=1}^N$ of the true data set. If the data were in fact linear with some measurement uncertainties, perhaps the uncertainties themselves are underestimated.
 
@@ -559,7 +666,7 @@ $$
 \mathcal{L} = \prod_{i=1}^N \frac{1}{\sqrt{2\pi\mathrm{S}}} \exp{\left(- \frac{(y_i - mx_i - b)^2}{2\mathrm{S}}\right)}
 $$
 ```{julia}
-@model function same_σ_model(N, x, y)
+@model function model_exr12(N, x, y)
 	b ~ Normal(0, 5)
 	m ~ Normal(0, 5)
 	S ~ InverseGamma(.001, .001) # common variance for all data
@@ -569,7 +676,7 @@ $$
 	end
 end
 
-chains_same_σ = sample(same_σ_model(subset_N, subset_x, subset_y), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+chains_same_σ = sample(model_exr12(subset_N, subset_x, subset_y), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
 
 bₑₓ₁₂ = mean(chains_same_σ[:b]);
 mₑₓ₁₂ = mean(chains_same_σ[:m]);
@@ -581,15 +688,97 @@ plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
 
 # Arbitrary 2-dimensional uncertainties
 
+## quick summary
+
+more complex scenario of fitting a line when both the x and y measurements have uncertainties: using a covariance tensor for each data point to represent the uncertainties in x, the uncertainties in y, and any correlation between the x and y errors
+
+covariance tensor $S_i = \begin{bmatrix} \sigma_{x_i}^2 & \sigma_{xy_i} \\ \sigma_{xy_i} & \sigma_{y_i}^2 \end{bmatrix}$ with $\sigma_{xy}=\rho_{xy}\sigma_x\sigma_y$
+
+likelihood
+$$
+\mathcal{L} = \prod_{i=1}^N \frac{1}{2\pi\sqrt{\det(S_i)}}\exp\left(-\frac{1}{2}\,\left[Z_i - Z\right]^\top S_i^{-1} \left[Z_i - Z\right]\right)
+$$
+with
+$$
+Z_i = \begin{bmatrix} x_i \\ y_i \end{bmatrix} \quad ; \quad
+Z = \begin{bmatrix} \hat{x_i} \\ \hat{y_i} \end{bmatrix} = \begin{bmatrix} \hat{x_i} \\ m\hat{x_i}+b \end{bmatrix}
+$$
+
+instead of slope $m$, use unit vector $\vec{v}$ orthogonal to the line
+$$
+\vec{v} = \frac{1}{\sqrt{1+m^2}} \begin{bmatrix} -m \\ 1 \end{bmatrix} = \begin{bmatrix} -\sin\theta \\ \cos\theta \end{bmatrix}
+$$
+with $\theta = \arctan m$ angle made between the line and the $x$ axis
+
+orthogonal displacement $\Delta_i$ of each data point $(x_i,y_i)$ from the line: $\Delta_i = \vec{v}^\top Z_i - b\cos\theta$
+
+each data point’s covariance tensor $S_i$ projects down to an orthogonal variance $\Sigma_i^2 = \vec{v}^\top S_i \vec{v}$
+
+then the log likelihood can be written as
+$$
+\log\mathcal{L} = K - \frac{1}{2}\sum_{i=1}^N \left[\frac{\Delta_i^2}{\Sigma_{i}^2} +\log{|\Sigma_{i}^2|} + \log{(1+m^2)} \right]
+$$
+where $K$ is some constant
+
+the authors suggest: performing the fit or likelihood maximization not in terms of $(m,b)$ but rather $(\theta,b_\perp)$, where $b_\perp = b\cos\theta$ the perpendicular distance of the line from the origin
+
+> In the astrophysics literature, there is a tradition, when there are uncertainties in both directions, of fitting the “forward” and “reverse” relations — that is, fitting y as a function of x and then x as a function of y — and then splitting the difference between the 2 slopes so obtained, or treating the difference between the slopes as a systematic uncertainty. This is unjustified.
+
+> Another common method for finding the linear relationship in data when there are uncertainties in both directions is principal components analysis. The method of PCA does return a linear relationship for a data set, in the form of the dominant principal component. However, this is the dominant principal component of the observed data, not of the underlying linear relationship that, when noise is added, generates the observations. For this reason, the output of PCA will be strongly drawn or affected by the individual data point noise covariances $S_i$.
+
+**example of mixture model with outlier**
+$$
+Z_{\mathrm{bad}} = \begin{bmatrix} X_{\mathrm{bad}} \\ Y_{\mathrm{bad}} \end{bmatrix} \quad ; \quad
+V_{\mathrm{bad}} = \begin{bmatrix}
+V_{\mathrm{bad}_x} & \rho_{\mathrm{bad}}\sqrt{V_{\mathrm{bad}_x}V_{\mathrm{bad}_y}} \\
+\rho_{\mathrm{bad}}\sqrt{V_{\mathrm{bad}_x}V_{\mathrm{bad}_y}} & V_{\mathrm{bad}_y}
+\end{bmatrix}
+$$
+$$
+\mathcal{L} \propto \prod_{i=1}^N\left[
+\frac{1-P_{\mathrm{bad}}}{\sqrt{2\pi\Sigma_{i}^2}} \cos(\theta) \exp\left(-\frac{\Delta_i^2}{2\Sigma_{i}^2}\right) +
+\frac{P_{\mathrm{bad}}}{\sqrt{2\pi\det{(V_{\mathrm{bad}}+S_i)}}} \exp\left(-\frac{1}{2}\,\left[Z_i - Z_{\mathrm{bad}}\right]^\top \left[V_{\mathrm{bad}}+S_i\right]^{-1} \left[Z_i - Z_{\mathrm{bad}}\right]\right)
+\right]
+$$
+
 ## exercise 13
 
 ::: {.callout-note}
 
-Using the method of this section, fit the straight line $y=m\,x+b$ to the $x$, $y$, $\sigma_x^2$, $\sigma_{xy}$, and $\sigma_y^2$ values of points 5 through 20 taken from the data. Make a plot showing the points, their 2-dimensional uncertainties (show them as one-sigma ellipses), and the best-fit line.
+Using the method of this section, fit the straight line $y=m\,x+b$ to the $x$, $y$, $\sigma_x^2$, $\sigma_{xy}$, and $\sigma_y^2$ values of points 5 through 20 taken from the data. Make a plot showing the points, their 2-dimensional uncertainties (show them as 1σ ellipses), and the best-fit line.
 
 :::
 
-lorem ipsum
+```{julia}
+const angle90 = π / 2;
+
+@model function model_exr13(N, x, y, σ_x, σ_y, ρ_xy)
+	b ~ Normal(0, 5) # intercept
+	θ ~ Uniform(-angle90, angle90) # angle of the fitted line, use this instead of slope
+	v = [-sin(θ) cos(θ)]' # unit vector orthogonal to the line
+
+	for i ∈ 1:N
+		z_i = [x[i], y[i]]
+		cov_xy_i = ρ_xy[i] * σ_x[i] * σ_y[i]
+		S_i = [σ_x[i]^2 cov_xy_i; cov_xy_i σ_y[i]^2]
+
+		Δ_i = dot(z_i, v) - b*v[1] # orthogonal displacement of each data point from the line
+		Σ²_i = dot(v', S_i, v) # orthogonal variance of projection of each data point to the line
+		Turing.@addlogprob! -.5*(Δ_i^2 / Σ²_i + log(abs(Σ²_i)) + log1p(tan(θ)^2))
+	end
+end
+
+chains_exr13 = sample(model_exr13(subset_N, subset_x, subset_y, subset_σ_x, subset_σ_y, subset_ρ_xy), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+```
+
+```{julia}
+bₑₓ₁₃ = mean(chains_exr13[:b]);
+mₑₓ₁₃ = tan(mean(chains_exr13[:θ]));
+
+plot_ellipses(subset_N, subset_x, subset_y, subset_σ_x, subset_σ_y, subset_ρ_xy)
+plot!(x -> mₑₓ₁₃*x + bₑₓ₁₃, label="exr 13")
+plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
+```
 
 ## exercise 14
 
