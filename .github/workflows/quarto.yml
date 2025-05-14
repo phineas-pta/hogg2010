@@ -30,7 +30,7 @@ jobs:
           sparse-checkout: hogg2010.qmd
           sparse-checkout-cone-mode: false
       - uses: julia-actions/setup-julia@v1
-      - run: julia --project -e 'using Pkg; Pkg.add(["Turing", "StatsPlots", "LogExpFunctions"])'
+      - run: julia --project=. -e 'using Pkg; Pkg.add(["Turing", "StatsPlots", "LogExpFunctions"])'
       - uses: quarto-dev/quarto-actions/setup@v2
         with:
           tinytex: true
