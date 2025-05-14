@@ -19,7 +19,6 @@ format:
     include-before-body:
       text: |
         \RecustomVerbatimEnvironment{verbatim}{Verbatim}{showspaces=false,showtabs=false,breaksymbolleft={},breaklines}
-    monofont: "Iosevka-Regular"
   html:
     page-layout: full
     toc-location: left-body
