@@ -1,0 +1,47 @@
+name: Render and Publish
+
+on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - .editorconfig
+      - .gitattributes
+      - .gitignore
+      - .gitlab-ci.yml
+      - LICENSE
+      - README.md
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: hogg2010.qmd
+          sparse-checkout-cone-mode: false
+      - uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          tinytex: true
+      - uses: julia-actions/setup-julia@v1
+      - run: julia --project -e 'using Pkg; Pkg.add(["Turing", "StatsPlots", "LogExpFunctions"])'
+      - uses: quarto-dev/quarto-actions/render@v2
+      - uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/deploy-pages@v4
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
