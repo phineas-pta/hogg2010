@@ -1,7 +1,9 @@
 ---
 title: "solutions to the exercises in “Data analysis recipes: Fitting a model to data”"
 subtitle: "Julia implementation of solutions to the exercises in David Hogg’s 2010 tutorial paper on fitting a model to data"
-author: "PTA"
+author:
+  - name: "PTA"
+    affiliations: "Distinguished Scholar of Treasure Hoarder Socio-Economics, Northland Bank archives, Snezhnaya"
 license: "CC BY"
 engine: julia
 julia:
@@ -9,6 +11,7 @@ julia:
 format:
   pdf:
     colorlinks: true
+    highlight-style: vim-dark
     documentclass: scrreprt
     papersize: a4
     geometry: ["margin=1cm", "footskip=5mm"]
@@ -23,7 +26,11 @@ format:
   html:
     page-layout: full
     toc-location: left-body
-    theme: journal
+    theme:
+      light: united
+      dark: superhero
+    respect-user-color-scheme: true
+    highlight-style: gruvbox
     title-block-banner: true
     anchor-sections: false
     smooth-scroll: true
@@ -32,16 +39,16 @@ format:
     include-in-header:
       text: |
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Nova+Mono&display=swap');
-        .sourceCode {font-family: "Nova Mono", monospace;}
+        @import url('https://fonts.googleapis.com/css2?family=Victor+Mono&display=swap');
+        .sourceCode {font-family: "Victor Mono", monospace;}
         </style>
     output-file: index.html
 toc: true
 number-sections: true
-highlight-style: vim-dark
 code-line-numbers: true
 fig-align: center
 callout-appearance: minimal
+editor: source
 ---
 
 <!--
@@ -117,7 +124,7 @@ Pkg.add(["Turing", "StatsPlots", "LogExpFunctions", "KernelDensity"])
 ```
 
 ```{julia}
-using Statistics: mean
+using Statistics: mean, quantile
 using LinearAlgebra: dot, diagm
 using LogExpFunctions: logaddexp, logsumexp
 using KernelDensity: kde
@@ -134,7 +141,19 @@ const full_σ_y  = [ 61.,  25.,  38.,  15.,  21.,  15.,  27.,  14.,  30.,  16., 
 const full_ρ_xy = [-.84,  .31,  .64, -.27, -.33,  .67, -.02, -.05, -.84, -.69,   .3, -.46, -.03,   .5,  .73, -.52,   .9,   .4, -.78, -.56];
 ```
 
-data points 5 through 20 in the table
+data but in tensor format, to be useful in sections 7 & 8
+```{julia}
+const full_Z = [[full_x[i], full_y[i]] for i ∈ 1:full_N];
+const full_S = [ # covariance tensor
+	[
+		full_σ_x[i]^2                          full_ρ_xy[i]*full_σ_x[i]*full_σ_y[i];
+		full_ρ_xy[i]*full_σ_x[i]*full_σ_y[i]   full_σ_y[i]^2
+	]
+	for i ∈ 1:full_N
+];
+```
+
+data points 5 through 20 in the table, which exclude outliers, to be used in various exercises
 ```{julia}
 const subset_N = 16;
 const subset_x    = full_x[   5:end];
@@ -142,6 +161,8 @@ const subset_y    = full_y[   5:end];
 const subset_σ_x  = full_σ_x[ 5:end];
 const subset_σ_y  = full_σ_y[ 5:end];
 const subset_ρ_xy = full_ρ_xy[5:end];
+const subset_Z    = full_Z[   5:end];
+const subset_S    = full_S[   5:end];
 ```
 
 options to run MCMC chains
@@ -155,19 +176,16 @@ const N_bins = max(isqrt(N_samples), N_samples ÷ 10); # in histogram
 
 helper functions
 ```{julia}
-const angle90 = π / 2;
+const angle90 = π / 2; # useful in sections 7 & 8
 
 function print_uncertainty(x, δx; digits=2)
 	return "$(round(x; digits=digits)) ± $(round(δx; digits=digits))"
 end
 
-function plot_ellipses(N, x, y, σ_x, σ_y, ρ_xy)
-	p = plot(x, y, seriestype=:scatter, label="")
+function plot_ellipses(N, x, y, Z, S)
+	p = plot(x, y, seriestype=:scatter, label=nothing)
 	for i ∈ 1:N
-		z_i = [x[i], y[i]]
-		cov_xy_i = ρ_xy[i] * σ_x[i] * σ_y[i]
-		S_i = [σ_x[i]^2 cov_xy_i; cov_xy_i σ_y[i]^2]
-		covellipse!(p, z_i, S_i, label="")
+		covellipse!(p, Z[i], S[i], label=nothing)
 	end
 	return p
 end
@@ -175,11 +193,11 @@ end
 
 quick look at data
 ```{julia}
-plot(full_x, full_y, xerror=full_σ_x, yerror=full_σ_y, seriestype=:scatter, label="")
+plot(full_x, full_y, xerror=full_σ_x, yerror=full_σ_y, seriestype=:scatter, label=nothing)
 ```
 
 ```{julia}
-plot_ellipses(full_N, full_x, full_y, full_σ_x, full_σ_y, full_ρ_xy)
+plot_ellipses(full_N, full_x, full_y, full_Z, full_S)
 ```
 
 # Standard practice
@@ -224,8 +242,8 @@ bₑₓ₀₁, mₑₓ₀₁ = Xₑₓ₀₁;
 ```
 
 ```{julia}
-plot(subset_x, subset_y, yerror=subset_σ_y, seriestype=:scatter, label="")
-plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="")
+plot(subset_x, subset_y, yerror=subset_σ_y, seriestype=:scatter, label=nothing)
+plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label=nothing)
 ```
 
 The “standard uncertainty variance” is to be found in the diagonals of the matrix: $\begin{bmatrix} \sigma_b^2 & \sigma_{mb} \\ \sigma_{mb} & \sigma_m^2 \end{bmatrix} = \left[A^\top\,C^{-1}\,A\right]^{-1}$
@@ -255,7 +273,7 @@ cov_bm = inv(tmp * Aₑₓ₀₂); # covariance matrix of b & m
 Xₑₓ₀₂ = cov_bm * tmp * Yₑₓ₀₂;
 bₑₓ₀₂, mₑₓ₀₂ = Xₑₓ₀₂;
 
-plot(full_x, full_y, yerror=full_σ_y, seriestype=:scatter, label="")
+plot(full_x, full_y, yerror=full_σ_y, seriestype=:scatter, label=nothing)
 plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
 plot!(x -> mₑₓ₀₂*x + bₑₓ₀₂, label="exr 02")
 ```
@@ -285,7 +303,7 @@ cov_bmq = inv(tmp * Aₑₓ₀₃); # covariance matrix of b, m & q
 Xₑₓ₀₃ = cov_bmq * tmp * Yₑₓ₀₃;
 bₑₓ₀₃, mₑₓ₀₃, qₑₓ₀₃ = Xₑₓ₀₃;
 
-plot(subset_x, subset_y, yerror=subset_σ_y, seriestype=:scatter, label="")
+plot(subset_x, subset_y, yerror=subset_σ_y, seriestype=:scatter, label=nothing)
 plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
 plot!(x -> qₑₓ₀₃*x^2 + mₑₓ₀₃*x + bₑₓ₀₃, label="exr 03")
 ```
@@ -413,8 +431,8 @@ For extra credit, plot a sampling of 10 lines drawn from the marginalized poster
 
 		## method 1: manually modify log likehood
 		#=
-		 inlier = log(1 - P_bad) + logpdf(Normal(ŷ_i  , σ_y[i]), y[i])
-		outlier = log(    P_bad) + logpdf(Normal(Y_bad, σ_bad ), y[i])
+		 inlier = log1p(-P_bad) + logpdf(Normal(ŷ_i  , σ_y[i]), y[i])
+		outlier = log(   P_bad) + logpdf(Normal(Y_bad, σ_bad ), y[i])
 		Turing.@addlogprob! logaddexp(inlier, outlier)
 		=#
 
@@ -429,7 +447,7 @@ chainsₑₓ₀₆ = sample(modelₑₓ₀₆(full_N, full_x, full_y, full_σ_y)
 
 diagnostics of chains:
 ```{julia}
-gelmandiag(chainsₑₓ₀₆)
+summarystats(chainsₑₓ₀₆)[:, [:mean, :std, :mcse, :rhat]]
 ```
 all chains seem converged, we’re good!
 
@@ -452,15 +470,15 @@ density!(p, chainsₑₓ₀₆[:b], subplot=1, title="b")
 density!(p, chainsₑₓ₀₆[:m], subplot=3, title="m")
 histogram2d!(p, chainsₑₓ₀₆[:b], chainsₑₓ₀₆[:m], subplot=5, bins=N_bins, normalize=:pdf, color=:plasma, xlabel="b", ylabel="m")
 
-density!(p, chainsₑₓ₀₆[:Y_bad], subplot=2, label=false, title="Y_bad")
-density!(p, chainsₑₓ₀₆[:P_bad], subplot=4, label=false, title="P_bad")
-density!(p, chainsₑₓ₀₆[:V_bad], subplot=6, label=false, title="V_bad")
+density!(p, chainsₑₓ₀₆[:Y_bad], subplot=2, label=nothing, title="Y_bad")
+density!(p, chainsₑₓ₀₆[:P_bad], subplot=4, label=nothing, title="P_bad")
+density!(p, chainsₑₓ₀₆[:V_bad], subplot=6, label=nothing, title="V_bad")
 ```
 
 ```{julia}
 bₑₓ₀₆ = mean(chainsₑₓ₀₆[:b]);
 mₑₓ₀₆ = mean(chainsₑₓ₀₆[:m]);
-plot(full_x, full_y, yerror=full_σ_y, seriestype=:scatter, label="")
+plot(full_x, full_y, yerror=full_σ_y, seriestype=:scatter, label=nothing)
 plot!(x -> mₑₓ₀₂*x + bₑₓ₀₂, label="exr 02")
 plot!(x -> mₑₓ₀₆*x + bₑₓ₀₆, label="exr 06")
 ```
@@ -476,16 +494,17 @@ Now repeat the problem, but dividing all the data uncertainty variances $\sigma_
 :::
 
 ```{julia}
-density(chainsₑₓ₀₆[:P_bad], label=false, title="P_bad with original error")
-```
-peak at 0.2, arguably 3-4 outliers in the data, so it makes sense
-
-Now with ½ the error
-```{julia}
 chainsₑₓ₀₇ = sample(modelₑₓ₀₆(full_N, full_x, full_y, full_σ_y ./ 2), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
-density(chainsₑₓ₀₇[:P_bad], label=false, title="P_bad with half error")
+summarystats(chainsₑₓ₀₇)[:, [:mean, :std, :mcse, :rhat]]
 ```
-meaning that many more points have been considered outliers
+```{julia}
+p = plot(layout=2)
+density!(p, chainsₑₓ₀₆[:P_bad], subplot=1, label=nothing, title="P_bad with original error")
+density!(p, chainsₑₓ₀₇[:P_bad], subplot=2, label=nothing, title="P_bad with half error")
+```
+with original error: peak at 0.2, arguably 3-4 outliers in the data, so it makes sense
+
+with ½ original error: bigger value for the peak meaning that many more points have been considered outliers
 
 ## little extra
 
@@ -503,7 +522,7 @@ Threads.@threads for step ∈ 1:N_samples
 		Y_bad = chainsₑₓ₀₆[:Y_bad][step, chain]
 		for i ∈ 1:full_N
 			ŷ_i = b + m * full_x[i]
-			inliers_log_prob = log(1 - P_bad) + logpdf(Normal(ŷ_i, full_σ_y[i]), full_y[i])
+			inliers_log_prob = log1p(-P_bad) + logpdf(Normal(ŷ_i, full_σ_y[i]), full_y[i])
 
 			σ_bad_i = sqrt(full_σ_y[i]^2 + V_bad)
 			outliers_log_prob = log(P_bad) + logpdf(Normal(Y_bad, σ_bad_i), full_y[i])
@@ -552,9 +571,16 @@ Did these posterior distributions get smaller or larger with the reduction in th
 :::
 
 ```{julia}
-chainsₑₓ₀₉      = sample(modelₑₓ₀₆(subset_N, subset_x, subset_y, subset_σ_y),      NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
-chainsₑₓ₀₉_½err = sample(modelₑₓ₀₆(subset_N, subset_x, subset_y, subset_σ_y ./ 2), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+chainsₑₓ₀₉ = sample(modelₑₓ₀₆(subset_N, subset_x, subset_y, subset_σ_y),      NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+summarystats(chainsₑₓ₀₉)[:, [:mean, :std, :mcse, :rhat]]
+```
 
+```{julia}
+chainsₑₓ₀₉_½err = sample(modelₑₓ₀₆(subset_N, subset_x, subset_y, subset_σ_y ./ 2), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+summarystats(chainsₑₓ₀₉_½err)[:, [:mean, :std, :mcse, :rhat]]
+```
+
+```{julia}
 p = plot(layout=2)
 plot!(p, kde((reduce(vcat, chainsₑₓ₀₉[     :b].data), reduce(vcat, chainsₑₓ₀₉[     :m].data))), subplot=1, xlabel="b", ylabel="m", title="with original error")
 plot!(p, kde((reduce(vcat, chainsₑₓ₀₉_½err[:b].data), reduce(vcat, chainsₑₓ₀₉_½err[:m].data))), subplot=2, xlabel="b", ylabel="m", title="with half error")
@@ -626,8 +652,9 @@ Sₑₓ₁₁ = 1:2000;
 end
 
 subsetNm2 = subset_N - 2
-plot(Sₑₓ₁₁, χ²ₑₓ₁₁, seriestype=:scatter, yaxis=:log, xlabel="S", ylabel="χ²", label="")
+plot(Sₑₓ₁₁, χ²ₑₓ₁₁, seriestype=:scatter, yaxis=:log, xlabel="S", ylabel="χ²", label=nothing)
 hline!([subsetNm2], label="χ²=N-2")
+vline!([mean(subset_σ_y .^ 2)], label="mean σ²")
 ```
 
 value S would be between:
@@ -653,7 +680,7 @@ Sₑₓ₁₁bis = 938:.01:939;
 	return only(tmp3' * tmp1 * tmp3) # get scalar from 1×1 matrix
 end
 
-plot(Sₑₓ₁₁bis, χ²ₑₓ₁₁bis, seriestype=:scatter, xlabel="S", ylabel="χ²", label="")
+plot(Sₑₓ₁₁bis, χ²ₑₓ₁₁bis, seriestype=:scatter, xlabel="S", ylabel="χ²", label=nothing)
 hline!([subsetNm2], label="χ²=N-2")
 ```
 
@@ -677,6 +704,7 @@ Gaussian likelihood:
 $$
 \mathcal{L} = \prod_{i=1}^N \frac{1}{\sqrt{2\pi\mathrm{S}}} \exp{\left(- \frac{(y_i - mx_i - b)^2}{2\mathrm{S}}\right)}
 $$
+
 ```{julia}
 @model function modelₑₓ₁₂(N, x, y)
 	b ~ Normal(0, 5)
@@ -688,12 +716,15 @@ $$
 	end
 end
 
-chains_same_σ = sample(modelₑₓ₁₂(subset_N, subset_x, subset_y), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+chainsₑₓ₁₂ = sample(modelₑₓ₁₂(subset_N, subset_x, subset_y), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+summarystats(chainsₑₓ₁₂)[:, [:mean, :std, :mcse, :rhat]]
+```
 
-bₑₓ₁₂ = mean(chains_same_σ[:b]);
-mₑₓ₁₂ = mean(chains_same_σ[:m]);
-Sₑₓ₁₂ = mean(chains_same_σ[:S]);
-plot(subset_x, subset_y, yerror=fill(sqrt(Sₑₓ₁₂), subset_N), seriestype=:scatter, label="")
+```{julia}
+bₑₓ₁₂ = mean(chainsₑₓ₁₂[:b]);
+mₑₓ₁₂ = mean(chainsₑₓ₁₂[:m]);
+Sₑₓ₁₂ = mean(chainsₑₓ₁₂[:S]);
+plot(subset_x, subset_y, yerror=fill(sqrt(Sₑₓ₁₂), subset_N), seriestype=:scatter, label=nothing)
 plot!(x -> mₑₓ₁₂*x + bₑₓ₁₂, label="exr 12")
 plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
 ```
@@ -762,30 +793,27 @@ Using the method of this section, fit the straight line $y=m\,x+b$ to the $x$, $
 :::
 
 ```{julia}
-@model function modelₑₓ₁₃(N, x, y, σ_x, σ_y, ρ_xy)
+@model function modelₑₓ₁₃(N, Z, S)
 	b ~ Normal(0, 5) # intercept
 	θ ~ Uniform(-angle90, angle90) # angle of the fitted line, use this instead of slope
 	v = [-sin(θ) cos(θ)]' # unit vector orthogonal to the line
 
 	for i ∈ 1:N
-		z_i = [x[i], y[i]]
-		cov_xy_i = ρ_xy[i] * σ_x[i] * σ_y[i]
-		S_i = [σ_x[i]^2 cov_xy_i; cov_xy_i σ_y[i]^2]
-
-		Δ_i = dot(z_i, v) - b*v[1] # orthogonal displacement of each data point from the line
-		Σ²_i = dot(v', S_i, v) # orthogonal variance of projection of each data point to the line
+		Δ_i = dot(Z[i], v) - b*v[1] # orthogonal displacement of each data point from the line
+		Σ²_i = dot(v', S[i], v) # orthogonal variance of projection of each data point to the line
 		Turing.@addlogprob! -.5*(Δ_i^2 / Σ²_i + log(abs(Σ²_i)) + log1p(tan(θ)^2))
 	end
 end
 
-chainsₑₓ₁₃ = sample(modelₑₓ₁₃(subset_N, subset_x, subset_y, subset_σ_x, subset_σ_y, subset_ρ_xy), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+chainsₑₓ₁₃ = sample(modelₑₓ₁₃(subset_N, subset_Z, subset_S), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+summarystats(chainsₑₓ₁₃)[:, [:mean, :std, :mcse, :rhat]]
 ```
 
 ```{julia}
 bₑₓ₁₃ = mean(chainsₑₓ₁₃[:b]);
 mₑₓ₁₃ = tan(mean(chainsₑₓ₁₃[:θ]));
 
-plot_ellipses(subset_N, subset_x, subset_y, subset_σ_x, subset_σ_y, subset_ρ_xy)
+plot_ellipses(subset_N, subset_x, subset_y, subset_Z, subset_S)
 plot!(x -> mₑₓ₁₃*x + bₑₓ₁₃, label="exr 13")
 plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
 ```
@@ -835,6 +863,18 @@ lorem ipsum
 
 # Intrinsic scatter
 
+## quick summary
+
+introduce an intrinsic Gaussian variance $V$, orthogonal to the line
+
+the log likelihood can be written as
+$$
+\log\mathcal{L} = K - \frac{1}{2}\sum_{i=1}^N \left[\frac{\Delta_i^2}{\Sigma_{i}^2+V} +\log{|\Sigma_{i}^2+V|} + \log{(1+m^2)} \right]
+$$
+where $K$ is some constant
+
+limitations: it models only the distribution orthogonal to the relationship
+
 ## exercise 17
 
 ::: {.callout-note}
@@ -843,7 +883,39 @@ Re-do exercise 13, but now allowing for an orthogonal intrinsic Gaussian varianc
 
 :::
 
-lorem ipsum
+
+```{julia}
+@model function modelₑₓ₁₇(N, Z, S)
+	b ~ Normal(0, 5) # intercept
+	θ ~ Uniform(-angle90, angle90) # angle of the fitted line, use this instead of slope
+	v = [-sin(θ) cos(θ)]' # unit vector orthogonal to the line
+	V ~ InverseGamma(.001, .001) # intrinsic Gaussian variance orthogonal to the line
+
+	for i ∈ 1:N
+		Δ_i = dot(Z[i], v) - b*v[1] # orthogonal displacement of each data point from the line
+		Σ²_i = dot(v', S[i], v) # orthogonal variance of projection of each data point to the line
+		tmp = Σ²_i + V # intermediary result
+		Turing.@addlogprob! -.5*(Δ_i^2 / tmp + log(abs(tmp)) + log1p(tan(θ)^2))
+	end
+end
+
+chainsₑₓ₁₇ = sample(modelₑₓ₁₇(subset_N, subset_Z, subset_S), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+summarystats(chainsₑₓ₁₇)[:, [:mean, :std, :mcse, :rhat]]
+```
+
+```{julia}
+bₑₓ₁₇ = mean(chainsₑₓ₁₇[:b]);
+θₑₓ₁₇ = mean(chainsₑₓ₁₇[:θ])
+mₑₓ₁₇ = tan(θₑₓ₁₇);
+Vₑₓ₁₇ = mean(chainsₑₓ₁₇[:V]);
+move_up = Vₑₓ₁₇ / cos(θₑₓ₁₇)
+
+plot_ellipses(subset_N, subset_x, subset_y, subset_Z, subset_S)
+plot!(x -> mₑₓ₁₇*x + bₑₓ₁₇, label="exr 17")
+plot!(x -> mₑₓ₁₇*x + bₑₓ₁₇ + move_up, linestyle=:dash, label=nothing)
+plot!(x -> mₑₓ₁₇*x + bₑₓ₁₇ - move_up, linestyle=:dash, label=nothing)
+plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
+```
 
 ## exercise 18
 
@@ -853,4 +925,11 @@ Re-do exercise 17 but as a Bayesian, with sensible Bayesian priors on $(\theta,b
 
 :::
 
-lorem ipsum
+```{julia}
+Vₑₓ₁₇bis = reduce(vcat, chainsₑₓ₁₇[:V].data)
+level95 = quantile(Vₑₓ₁₇bis, [0.025, 0.975])
+level99 = quantile(Vₑₓ₁₇bis, [0.005, 0.995])
+density(chainsₑₓ₁₇[:V], title="V", label=nothing)
+vline!(level95, label="95%")
+vline!(level99, label="99%")
+```
