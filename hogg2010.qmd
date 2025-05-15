@@ -927,12 +927,12 @@ For extra credit, plot a sampling of 10 lines drawn from the marginalized poster
 		tmp1 = ℤ[i] - Z_bad
 		tmp2 = 𝕊[i] + V_bad
 		inlier = log1p(-P_bad) - .5*log(abs(Σᵢ²)) + log(abs(v⃗[1])) - .5 * Δᵢ^2 / Σᵢ²
-		outlier = log(P_bad) - .5*log(det(tmp2)) - .5 * tmp1' * tmp2 * tmp1
+		outlier = log(P_bad) - .5*log(abs(det(tmp2))) - .5 * tmp1' * tmp2 * tmp1
 		Turing.@addlogprob! logaddexp(inlier, outlier)
 	end
 end
 
-data_modelₑₓ₁₄ = modelₑₓ₁₄(N´, Z´, S´)
+data_modelₑₓ₁₄ = modelₑₓ₁₄(N, Z, S)
 chainsₑₓ₁₄ = sample(data_modelₑₓ₁₄, NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
 print_information_criterion(data_modelₑₓ₁₄, chainsₑₓ₁₄)
 print_summary(chainsₑₓ₁₄)
@@ -942,7 +942,7 @@ print_summary(chainsₑₓ₁₄)
 bₑₓ₁₄ = mean(chainsₑₓ₁₄[:b]);
 mₑₓ₁₄ = tan(mean(chainsₑₓ₁₄[:θ]));
 
-plot_ellipses(N´, x´, y´, Z´, S´)
+plot_ellipses(N, x, y, Z, S)
 plot!(𝕩 -> mₑₓ₁₄*𝕩 + bₑₓ₁₄, label="exr 13")
 plot!(𝕩 -> mₑₓ₀₂*𝕩 + bₑₓ₀₂, label="exr 02")
 ```
@@ -978,9 +978,9 @@ Z̄´ = [mean(x´), mean(y´)];
 Z´_centered = [Z´[i] - Z̄´ for i ∈ 1:N´];
 Q = sum([z*z' for z ∈ Z´_centered]);
 _, eigvecs = eigen(Q);
-eigvecs_max = eigvecs[:, end];
+eigvecs_max = eigvecs[:, end]; # direction vector of 1st principal component
 mₑₓ₁₆ = eigvecs_max[end] / eigvecs_max[begin];
-bₑₓ₁₆ = -mₑₓ₁₆ * Z̄´[1] + Z̄´[2];
+bₑₓ₁₆ = Z̄´[2] - mₑₓ₁₆ * Z̄´[1]; # 1st principal component goes through the means
 plot(x´, y´, seriestype=:scatter, label=nothing)
 plot!(𝕩 -> mₑₓ₁₆*𝕩 + bₑₓ₁₆, label=nothing)
 ```
