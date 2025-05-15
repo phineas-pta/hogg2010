@@ -40,7 +40,7 @@ format:
       text: |
         <style>
         @font-face {font-family: JuliaMono; src: url("https://cdn.jsdelivr.net/gh/cormullion/juliamono-webfonts/JuliaMono-Regular.woff2");}
-        .sourceCode {font-family: JuliaMono, monospace;}
+        pre {font-family: JuliaMono, monospace;}
         </style>
     output-file: index.html
 toc: true
@@ -66,6 +66,8 @@ to show plot in pdf, need rsvg-convert
 # preliminary {.unnumbered}
 
 source code of this document: <https://github.com/phineas-pta/hogg2010/blob/main/hogg2010.qmd>
+
+rendered using `quarto`
 
 ## references & resources {.unnumbered}
 
@@ -122,15 +124,16 @@ given the authors’ academic background, those data have very likely astrophysi
 ```{julia}
 #| eval: false
 import Pkg
-Pkg.add(["Turing", "StatsPlots", "LogExpFunctions", "KernelDensity"])
+Pkg.add(["Turing", "StatsPlots", "LogExpFunctions", "DataFrames", "KernelDensity", "MarkdownTables"])
 ```
 
 ```{julia}
-using Statistics: mean, quantile
-using LinearAlgebra: dot, diagm
+using Statistics: mean, var, quantile
+using LinearAlgebra: dot, diagm, det, eigen
 using LogExpFunctions: logaddexp, logsumexp
 using KernelDensity: kde
-using Turing, StatsPlots
+using DataFrames: DataFrame, eachrow
+using Turing, StatsPlots, MarkdownTables
 ```
 
 data entry
@@ -191,6 +194,39 @@ function plot_ellipses(ℕ, 𝕩, 𝕪, ℤ, 𝕊)
 	end
 	return p
 end
+
+# formatter to use with MarkdownTables
+value_to_markdown(𝕩::Number) = "$(round(𝕩; digits=3))"
+value_to_markdown(𝕩::AbstractString) = 𝕩
+value_to_markdown(𝕩) = "`$𝕩`"
+
+function print_summary(mcmc_chains)
+	return markdown_table(summarystats(mcmc_chains)[:, [:mean, :std, :mcse, :rhat]]; formatter=value_to_markdown)
+end
+
+function print_information_criterion(data_model, mcmc_chains)
+	# posterior log likehood
+	# copied from https://discourse.julialang.org/t/likelihood-from-turing-model/102022/6
+	post_logℒ = [loglikelihood(data_model, row) for row ∈ eachrow(DataFrame(mcmc_chains))]
+
+	# Deviance Information Criterion
+	# copied from https://github.com/StatisticalRethinkingJulia/ParetoSmoothedImportanceSampling.jl/blob/master/src/dic.jl
+	deviance = (-2) .* post_logℒ
+	DIC = mean(deviance) + var(deviance) / 2
+
+	# Widely Applicable Information Criterion
+	# copied from https://github.com/StatisticalRethinkingJulia/ParetoSmoothedImportanceSampling.jl/blob/master/src/waic.jl
+	lpd = dropdims(logsumexp(post_logℒ .- log(size(post_logℒ)[1]); dims=1); dims=1)
+	pD = dropdims(var(post_logℒ; dims=1, corrected=false); dims=1)
+	WAIC = sum((-2) .* (lpd - pD))
+	LPD = sum(lpd)
+	penalty = sum(pD)
+
+	println("Deviance Information Criterion: $DIC")
+	println("Widely Applicable Information Criterion: $WAIC")
+	println("Log predictive density: $LPD")
+	println("overfitting penalty: $penalty")
+end
 ```
 
 quick look at data
@@ -245,7 +281,7 @@ bₑₓ₀₁, mₑₓ₀₁ = Xₑₓ₀₁;
 
 ```{julia}
 plot(x´, y´, yerror=σ_y´, seriestype=:scatter, label=nothing)
-plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label=nothing)
+plot!(𝕩 -> mₑₓ₀₁*𝕩 + bₑₓ₀₁, label=nothing)
 ```
 
 The “standard uncertainty variance” is to be found in the diagonals of the matrix: $\begin{bmatrix} \sigma_b^2 & \sigma_{mb} \\ \sigma_{mb} & \sigma_m^2 \end{bmatrix} = \left[A^\top\,C^{-1}\,A\right]^{-1}$
@@ -276,8 +312,8 @@ Xₑₓ₀₂ = cov_bm * tmp * Yₑₓ₀₂;
 bₑₓ₀₂, mₑₓ₀₂ = Xₑₓ₀₂;
 
 plot(x, y, yerror=σ_y, seriestype=:scatter, label=nothing)
-plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
-plot!(x -> mₑₓ₀₂*x + bₑₓ₀₂, label="exr 02")
+plot!(𝕩 -> mₑₓ₀₁*𝕩 + bₑₓ₀₁, label="exr 01")
+plot!(𝕩 -> mₑₓ₀₂*𝕩 + bₑₓ₀₂, label="exr 02")
 ```
 
 new values for the fitted line: $b=$ `{julia} print_uncertainty(bₑₓ₀₂, sqrt(cov_bm[1, 1]))` and $m=$ `{julia} print_uncertainty(mₑₓ₀₂, sqrt(cov_bm[2, 2]))`
@@ -306,8 +342,8 @@ Xₑₓ₀₃ = cov_bmq * tmp * Yₑₓ₀₃;
 bₑₓ₀₃, mₑₓ₀₃, qₑₓ₀₃ = Xₑₓ₀₃;
 
 plot(x´, y´, yerror=σ_y´, seriestype=:scatter, label=nothing)
-plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
-plot!(x -> qₑₓ₀₃*x^2 + mₑₓ₀₃*x + bₑₓ₀₃, label="exr 03")
+plot!(𝕩 -> mₑₓ₀₁*𝕩 + bₑₓ₀₁, label="exr 01")
+plot!(𝕩 -> qₑₓ₀₃*𝕩^2 + mₑₓ₀₃*𝕩 + bₑₓ₀₃, label="exr 03")
 ```
 
 $b=$ `{julia} print_uncertainty(bₑₓ₀₃, sqrt(cov_bmq[1, 1]))` and $m=$ `{julia} print_uncertainty(mₑₓ₀₃, sqrt(cov_bmq[2, 2]))` and $q=$ `{julia} print_uncertainty(qₑₓ₀₃, sqrt(cov_bmq[3, 3]); digits=4)`
@@ -361,23 +397,43 @@ Take the matrix formulation for $\chi^2$ given in equation (7) and take derivati
 
 :::
 
-*Equation (7)* is $\chi^2 = [Y-AX]^\top C^{-1}[Y-AX]$
-
-By the product rule, we have $\frac{\partial}{\partial X} \chi^2 = \left(\frac{\partial}{\partial X}[Y-AX]^\top\right)C^{-1}[Y-AX] + [Y-AX]^\top\left(\frac{\partial}{\partial X} C^{-1}[Y-AX]\right)$
-
-Differentiating, we get $\frac{\partial}{\partial X} \chi^2 = -A^\top C^{-1}[Y-AX] [Y-AX]^\top C^{-1}[-A]$
-
-Multiplying out $\frac{\partial}{\partial X} \chi^2 = -A^\top C^{-1}Y + A^\top C^{-1}AX - Y^\top C^{-1}A + [AX]^\top C^{-1}A$
-
-Since $-A^\top C^{-1}Y$ is a scalar, it equals its own transpose $\frac{\partial}{\partial X} \chi^2 = -2A^\top C^{-1}Y + A^\top C^{-1}AX + X^\top A^\top C^{-1}A$
-
-The two terms in $X$ are also simply transposes of one another, and can thus be trivially added together $\frac{\partial}{\partial X} \chi^2 = -2A^\top C^{-1}Y + 2 A^\top C^{-1}AX$
-
-$X$ takes its maximum likelihood value when the derivative is $0$: $-2A^\top C^{-1}Y + 2 A^\top C^{-1}A\hat{X} = 0$
-
-Rearranging: $A^\top C^{-1}A\hat{X} = 2A^\top C^{-1}Y$
-
-And so $\hat{X} = \left(A^\top C^{-1}A\right)^{-1}A^\top C^{-1}Y$ As given in *equation (5)*
+*Equation (7)* is
+$$
+\chi^2 = [Y-AX]^\top C^{-1}[Y-AX]
+$$
+By the product rule, we have
+$$
+\frac{\partial}{\partial X} \chi^2 = \left(\frac{\partial}{\partial X}[Y-AX]^\top\right)C^{-1}[Y-AX] + [Y-AX]^\top\left(\frac{\partial}{\partial X} C^{-1}[Y-AX]\right)
+$$
+Differentiating, we get
+$$
+\frac{\partial}{\partial X} \chi^2 = -A^\top C^{-1}[Y-AX] [Y-AX]^\top C^{-1}[-A]
+$$
+Multiplying out
+$$
+\frac{\partial}{\partial X} \chi^2 = -A^\top C^{-1}Y + A^\top C^{-1}AX - Y^\top C^{-1}A + [AX]^\top C^{-1}A
+$$
+Since $-A^\top C^{-1}Y$ is a scalar, it equals its own transpose
+$$
+\frac{\partial}{\partial X} \chi^2 = -2A^\top C^{-1}Y + A^\top C^{-1}AX + X^\top A^\top C^{-1}A
+$$
+The two terms in $X$ are also simply transposes of one another, and can thus be trivially added together
+$$
+\frac{\partial}{\partial X} \chi^2 = -2A^\top C^{-1}Y + 2 A^\top C^{-1}AX
+$$
+$X$ takes its maximum likelihood value when the derivative is $0$:
+$$
+-2A^\top C^{-1}Y + 2 A^\top C^{-1}A\hat{X} = 0
+$$
+Rearranging:
+$$
+A^\top C^{-1}A\hat{X} = 2A^\top C^{-1}Y
+$$
+And so
+$$
+\hat{X} = \left(A^\top C^{-1}A\right)^{-1}A^\top C^{-1}Y
+$$
+As given in *equation (5)*
 
 # Pruning outliers
 
@@ -429,27 +485,29 @@ For extra credit, plot a sampling of 10 lines drawn from the marginalized poster
 	# faster computation: marginalize discrete param
 	for i ∈ 1:ℕ
 		𝕪̂ᵢ = b + m * 𝕩[i]
-		σ_bad = sqrt(σ_𝕪[i]^2 + V_bad)
+		σ_badᵢ = sqrt(σ_𝕪[i]^2 + V_bad)
 
 		## method 1: manually modify log likehood
 		#=
 		 inlier = log1p(-P_bad) + logpdf(Normal(𝕪̂ᵢ   , σ_𝕪[i]), 𝕪[i])
-		outlier = log(   P_bad) + logpdf(Normal(Y_bad, σ_bad ), 𝕪[i])
+		outlier = log(   P_bad) + logpdf(Normal(Y_bad, σ_badᵢ), 𝕪[i])
 		Turing.@addlogprob! logaddexp(inlier, outlier)
 		=#
 
 		## medthod 2: use convenient constructors for mixture models
-		𝕪[i] ~ MixtureModel(Normal, [(𝕪̂ᵢ, σ_𝕪[i]), (Y_bad, σ_bad)], [1 - P_bad, P_bad])
+		𝕪[i] ~ MixtureModel(Normal, [(𝕪̂ᵢ, σ_𝕪[i]), (Y_bad, σ_badᵢ)], [1 - P_bad, P_bad])
 
 	end
 end
 
-chainsₑₓ₀₆ = sample(modelₑₓ₀₆(N, x, y, σ_y), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+data_modelₑₓ₀₆ = modelₑₓ₀₆(N, x, y, σ_y)
+chainsₑₓ₀₆ = sample(data_modelₑₓ₀₆, NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
 ```
 
 diagnostics of chains:
 ```{julia}
-summarystats(chainsₑₓ₀₆)[:, [:mean, :std, :mcse, :rhat]]
+print_information_criterion(data_modelₑₓ₀₆, chainsₑₓ₀₆)
+print_summary(chainsₑₓ₀₆)
 ```
 all chains seem converged, we’re good!
 
@@ -481,8 +539,8 @@ density!(p, chainsₑₓ₀₆[:V_bad], subplot=6, label=nothing, title="V_bad")
 bₑₓ₀₆ = mean(chainsₑₓ₀₆[:b]);
 mₑₓ₀₆ = mean(chainsₑₓ₀₆[:m]);
 plot(x, y, yerror=σ_y, seriestype=:scatter, label=nothing)
-plot!(x -> mₑₓ₀₂*x + bₑₓ₀₂, label="exr 02")
-plot!(x -> mₑₓ₀₆*x + bₑₓ₀₆, label="exr 06")
+plot!(𝕩 -> mₑₓ₀₂*𝕩 + bₑₓ₀₂, label="exr 02")
+plot!(𝕩 -> mₑₓ₀₆*𝕩 + bₑₓ₀₆, label="exr 06")
 ```
 
 ## exercise 07
@@ -496,8 +554,10 @@ Now repeat the problem, but dividing all the data uncertainty variances $\sigma_
 :::
 
 ```{julia}
-chainsₑₓ₀₇ = sample(modelₑₓ₀₆(N, x, y, σ_y ./ 2), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
-summarystats(chainsₑₓ₀₇)[:, [:mean, :std, :mcse, :rhat]]
+data_modelₑₓ₀₇ = modelₑₓ₀₆(N, x, y, σ_y ./ 2)
+chainsₑₓ₀₇ = sample(data_modelₑₓ₀₇, NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+print_information_criterion(data_modelₑₓ₀₇, chainsₑₓ₀₇)
+print_summary(chainsₑₓ₀₇)
 ```
 ```{julia}
 p = plot(layout=2)
@@ -573,13 +633,17 @@ Did these posterior distributions get smaller or larger with the reduction in th
 :::
 
 ```{julia}
-chainsₑₓ₀₉ = sample(modelₑₓ₀₆(N´, x´, y´, σ_y´),      NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
-summarystats(chainsₑₓ₀₉)[:, [:mean, :std, :mcse, :rhat]]
+data_modelₑₓ₀₉ = modelₑₓ₀₆(N´, x´, y´, σ_y´)
+chainsₑₓ₀₉ = sample(data_modelₑₓ₀₉, NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+print_information_criterion(data_modelₑₓ₀₉, chainsₑₓ₀₉)
+print_summary(chainsₑₓ₀₉)
 ```
 
 ```{julia}
-chainsₑₓ₀₉_½err = sample(modelₑₓ₀₆(N´, x´, y´, σ_y´ ./ 2), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
-summarystats(chainsₑₓ₀₉_½err)[:, [:mean, :std, :mcse, :rhat]]
+data_modelₑₓ₀₉_½err = modelₑₓ₀₆(N´, x´, y´, σ_y´ ./ 2)
+chainsₑₓ₀₉_½err = sample(data_modelₑₓ₀₉_½err, NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+print_information_criterion(data_modelₑₓ₀₉_½err, chainsₑₓ₀₉_½err)
+print_summary(chainsₑₓ₀₉_½err)
 ```
 
 ```{julia}
@@ -661,11 +725,11 @@ vline!([mean(σ_y´ .^ 2)], label="mean σ²")
 
 value S would be between:
 ```{julia}
-Sₑₓ₁₁[findlast(x -> x > subsetNm2, χ²ₑₓ₁₁)]
+Sₑₓ₁₁[findlast(𝕩 -> 𝕩 > subsetNm2, χ²ₑₓ₁₁)]
 ```
 and
 ```{julia}
-Sₑₓ₁₁[findfirst(x -> x < subsetNm2, χ²ₑₓ₁₁)]
+Sₑₓ₁₁[findfirst(𝕩 -> 𝕩 < subsetNm2, χ²ₑₓ₁₁)]
 ```
 
 ```{julia}
@@ -718,8 +782,10 @@ $$
 	end
 end
 
-chainsₑₓ₁₂ = sample(modelₑₓ₁₂(N´, x´, y´), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
-summarystats(chainsₑₓ₁₂)[:, [:mean, :std, :mcse, :rhat]]
+data_modelₑₓ₁₂ = modelₑₓ₁₂(N´, x´, y´)
+chainsₑₓ₁₂ = sample(data_modelₑₓ₁₂, NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+print_information_criterion(data_modelₑₓ₁₂, chainsₑₓ₁₂)
+print_summary(chainsₑₓ₁₂)
 ```
 
 ```{julia}
@@ -727,8 +793,8 @@ bₑₓ₁₂ = mean(chainsₑₓ₁₂[:b]);
 mₑₓ₁₂ = mean(chainsₑₓ₁₂[:m]);
 Sₑₓ₁₂ = mean(chainsₑₓ₁₂[:S]);
 plot(x´, y´, yerror=fill(sqrt(Sₑₓ₁₂), N´), seriestype=:scatter, label=nothing)
-plot!(x -> mₑₓ₁₂*x + bₑₓ₁₂, label="exr 12")
-plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
+plot!(𝕩 -> mₑₓ₁₂*𝕩 + bₑₓ₁₂, label="exr 12")
+plot!(𝕩 -> mₑₓ₀₁*𝕩 + bₑₓ₀₁, label="exr 01")
 ```
 
 # Arbitrary 2-dimensional uncertainties
@@ -807,8 +873,10 @@ Using the method of this section, fit the straight line $y=m\,x+b$ to the $x$, $
 	end
 end
 
-chainsₑₓ₁₃ = sample(modelₑₓ₁₃(N´, Z´, S´), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
-summarystats(chainsₑₓ₁₃)[:, [:mean, :std, :mcse, :rhat]]
+data_modelₑₓ₁₃ = modelₑₓ₁₃(N´, Z´, S´)
+chainsₑₓ₁₃ = sample(data_modelₑₓ₁₃, NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+print_information_criterion(data_modelₑₓ₁₃, chainsₑₓ₁₃)
+print_summary(chainsₑₓ₁₃)
 ```
 
 ```{julia}
@@ -816,8 +884,8 @@ bₑₓ₁₃ = mean(chainsₑₓ₁₃[:b]);
 mₑₓ₁₃ = tan(mean(chainsₑₓ₁₃[:θ]));
 
 plot_ellipses(N´, x´, y´, Z´, S´)
-plot!(x -> mₑₓ₁₃*x + bₑₓ₁₃, label="exr 13")
-plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
+plot!(𝕩 -> mₑₓ₁₃*𝕩 + bₑₓ₁₃, label="exr 13")
+plot!(𝕩 -> mₑₓ₀₁*𝕩 + bₑₓ₀₁, label="exr 01")
 ```
 
 ## exercise 14
@@ -833,7 +901,51 @@ For extra credit, plot a sampling of 10 lines drawn from the marginalized poster
 
 :::
 
-lorem ipsum
+```{julia}
+@model function modelₑₓ₁₄(ℕ, ℤ, 𝕊)
+	b ~ Normal(0, 5) # intercept
+	θ ~ Uniform(-angle90, angle90) # angle of the fitted line, use this instead of slope
+	v⃗ = [-sin(θ) cos(θ)]' # unit vector orthogonal to the line
+
+	# for outliers
+	P_bad ~ Uniform(0, 1)
+	X_bad ~ Normal(0, 10)
+	Y_bad ~ Normal(0, 10)
+	V_bad_x ~ InverseGamma(.001, .001)
+	V_bad_y ~ InverseGamma(.001, .001)
+	ρ_bad ~ Uniform(-1, 1)
+
+	Z_bad = [X_bad, Y_bad]
+	V_bad = [
+		V_bad_x                         ρ_bad * sqrt(V_bad_x*V_bad_y);
+		ρ_bad * sqrt(V_bad_x*V_bad_y)   V_bad_y
+	]
+
+	for i ∈ 1:ℕ
+		Δᵢ = dot(ℤ[i], v⃗) - b*v⃗[1] # orthogonal displacement of each data point from the line
+		Σᵢ² = dot(v⃗', 𝕊[i], v⃗) # orthogonal variance of projection of each data point to the line
+		tmp1 = ℤ[i] - Z_bad
+		tmp2 = 𝕊[i] + V_bad
+		inlier = log1p(-P_bad) - .5*log(abs(Σᵢ²)) + log(abs(v⃗[1])) - .5 * Δᵢ^2 / Σᵢ²
+		outlier = log(P_bad) - .5*log(det(tmp2)) - .5 * tmp1' * tmp2 * tmp1
+		Turing.@addlogprob! logaddexp(inlier, outlier)
+	end
+end
+
+data_modelₑₓ₁₄ = modelₑₓ₁₄(N´, Z´, S´)
+chainsₑₓ₁₄ = sample(data_modelₑₓ₁₄, NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+print_information_criterion(data_modelₑₓ₁₄, chainsₑₓ₁₄)
+print_summary(chainsₑₓ₁₄)
+```
+
+```{julia}
+bₑₓ₁₄ = mean(chainsₑₓ₁₄[:b]);
+mₑₓ₁₄ = tan(mean(chainsₑₓ₁₄[:θ]));
+
+plot_ellipses(N´, x´, y´, Z´, S´)
+plot!(𝕩 -> mₑₓ₁₄*𝕩 + bₑₓ₁₄, label="exr 13")
+plot!(𝕩 -> mₑₓ₀₂*𝕩 + bₑₓ₀₂, label="exr 02")
+```
 
 ## exercise 15
 
@@ -861,7 +973,18 @@ Now make a plot showing the data points, and the line that goes through the mean
 
 :::
 
-lorem ipsum
+```{julia}
+Z̄´ = [mean(x´), mean(y´)];
+Z´_centered = [Z´[i] - Z̄´ for i ∈ 1:N´];
+Q = sum([z*z' for z ∈ Z´_centered]);
+_, eigvecs = eigen(Q);
+eigvecs_max = eigvecs[:, end];
+mₑₓ₁₆ = eigvecs_max[end] / eigvecs_max[begin];
+bₑₓ₁₆ = -mₑₓ₁₆ * Z̄´[1] + Z̄´[2];
+plot(x´, y´, seriestype=:scatter, label=nothing)
+plot!(𝕩 -> mₑₓ₁₆*𝕩 + bₑₓ₁₆, label=nothing)
+```
+slope = `{julia} mₑₓ₁₆` and intercept = `{julia} bₑₓ₁₆`
 
 # Intrinsic scatter
 
@@ -901,8 +1024,10 @@ Re-do exercise 13, but now allowing for an orthogonal intrinsic Gaussian varianc
 	end
 end
 
-chainsₑₓ₁₇ = sample(modelₑₓ₁₇(N´, Z´, S´), NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
-summarystats(chainsₑₓ₁₇)[:, [:mean, :std, :mcse, :rhat]]
+data_modelₑₓ₁₇ = modelₑₓ₁₇(N´, Z´, S´)
+chainsₑₓ₁₇ = sample(data_modelₑₓ₁₇, NUTS(), MCMCThreads(), N_samples, N_chains; num_warmup=N_warmup, thinning=N_thinning);
+print_information_criterion(data_modelₑₓ₁₇, chainsₑₓ₁₇)
+print_summary(chainsₑₓ₁₇)
 ```
 
 ```{julia}
@@ -913,10 +1038,10 @@ Vₑₓ₁₇ = mean(chainsₑₓ₁₇[:V]);
 move_up = Vₑₓ₁₇ / cos(θₑₓ₁₇)
 
 plot_ellipses(N´, x´, y´, Z´, S´)
-plot!(x -> mₑₓ₁₇*x + bₑₓ₁₇, label="exr 17")
-plot!(x -> mₑₓ₁₇*x + bₑₓ₁₇ + move_up, linestyle=:dash, label=nothing)
-plot!(x -> mₑₓ₁₇*x + bₑₓ₁₇ - move_up, linestyle=:dash, label=nothing)
-plot!(x -> mₑₓ₀₁*x + bₑₓ₀₁, label="exr 01")
+plot!(𝕩 -> mₑₓ₁₇*𝕩 + bₑₓ₁₇, label="exr 17")
+plot!(𝕩 -> mₑₓ₁₇*𝕩 + bₑₓ₁₇ + move_up, linestyle=:dash, label=nothing)
+plot!(𝕩 -> mₑₓ₁₇*𝕩 + bₑₓ₁₇ - move_up, linestyle=:dash, label=nothing)
+plot!(𝕩 -> mₑₓ₀₁*𝕩 + bₑₓ₀₁, label="exr 01")
 ```
 
 ## exercise 18

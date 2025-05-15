@@ -30,11 +30,11 @@ jobs:
           sparse-checkout: hogg2010.qmd
           sparse-checkout-cone-mode: false
       - uses: julia-actions/setup-julia@v1
-      - name: install dependencies and iosevka fonts
+      - name: install dependencies and fonts
         run: |
           sudo apt-get update
           sudo apt-get install -y librsvg2-bin
-          julia --project=. -e 'using Pkg; Pkg.add(["Turing", "StatsPlots", "LogExpFunctions", "KernelDensity"])'
+          julia --project=. -e 'using Pkg; Pkg.add(["Turing", "StatsPlots", "LogExpFunctions", "DataFrames", "KernelDensity", "MarkdownTables"])'
           mkdir /tmp/juliamono
           wget -P /tmp/juliamono https://github.com/cormullion/juliamono/releases/latest/download/JuliaMono-ttf.zip
           unzip /tmp/juliamono/JuliaMono-ttf.zip -d /tmp/juliamono
@@ -46,6 +46,7 @@ jobs:
       - uses: quarto-dev/quarto-actions/render@v2
         with:
           path: hogg2010.qmd
+      - run: rm hogg2010.qmd *.toml
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
