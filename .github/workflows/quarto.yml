@@ -35,11 +35,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y librsvg2-bin
           julia --project=. -e 'using Pkg; Pkg.add(["Turing", "StatsPlots", "LogExpFunctions", "KernelDensity"])'
-          mkdir /tmp/iosevka
-          RELEASE="33.2.2"
-          wget -P /tmp/iosevka https://github.com/be5invis/Iosevka/releases/download/v$RELEASE/PkgTTC-Iosevka-$RELEASE.zip
-          unzip /tmp/iosevka/*.zip -d /tmp/iosevka
-          sudo mv /tmp/iosevka/*.ttc /usr/local/share/fonts/
+          mkdir /tmp/juliamono
+          wget -P /tmp/juliamono https://github.com/cormullion/juliamono/releases/latest/download/JuliaMono-ttf.zip
+          unzip /tmp/juliamono/JuliaMono-ttf.zip -d /tmp/juliamono
+          sudo mv /tmp/juliamono/*.ttf /usr/local/share/fonts/
           sudo fc-cache -fv
       - uses: quarto-dev/quarto-actions/setup@v2
         with:
