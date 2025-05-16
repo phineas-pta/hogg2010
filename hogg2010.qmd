@@ -188,7 +188,7 @@ function print_uncertainty(𝕩, δ𝕩; digits=2)
 end
 
 function plot_ellipses(ℕ, 𝕩, 𝕪, ℤ, 𝕊)
-	p = plot(𝕩, 𝕪, seriestype=:scatter, label=nothing)
+	p = scatter(𝕩, 𝕪, label=nothing)
 	for i ∈ 1:ℕ
 		covellipse!(p, ℤ[i], 𝕊[i], label=nothing)
 	end
@@ -231,7 +231,7 @@ end
 
 quick look at data
 ```{julia}
-plot(x, y, xerror=σ_x, yerror=σ_y, seriestype=:scatter, label=nothing)
+scatter(x, y, xerror=σ_x, yerror=σ_y, label=nothing)
 ```
 
 ```{julia}
@@ -280,7 +280,7 @@ bₑₓ₀₁, mₑₓ₀₁ = Xₑₓ₀₁;
 ```
 
 ```{julia}
-plot(x´, y´, yerror=σ_y´, seriestype=:scatter, label=nothing)
+scatter(x´, y´, yerror=σ_y´, label=nothing)
 plot!(𝕩 -> mₑₓ₀₁*𝕩 + bₑₓ₀₁, label=nothing)
 ```
 
@@ -311,7 +311,7 @@ cov_bm = inv(tmp * Aₑₓ₀₂); # covariance matrix of b & m
 Xₑₓ₀₂ = cov_bm * tmp * Yₑₓ₀₂;
 bₑₓ₀₂, mₑₓ₀₂ = Xₑₓ₀₂;
 
-plot(x, y, yerror=σ_y, seriestype=:scatter, label=nothing)
+scatter(x, y, yerror=σ_y, label=nothing)
 plot!(𝕩 -> mₑₓ₀₁*𝕩 + bₑₓ₀₁, label="exr 01")
 plot!(𝕩 -> mₑₓ₀₂*𝕩 + bₑₓ₀₂, label="exr 02")
 ```
@@ -341,7 +341,7 @@ cov_bmq = inv(tmp * Aₑₓ₀₃); # covariance matrix of b, m & q
 Xₑₓ₀₃ = cov_bmq * tmp * Yₑₓ₀₃;
 bₑₓ₀₃, mₑₓ₀₃, qₑₓ₀₃ = Xₑₓ₀₃;
 
-plot(x´, y´, yerror=σ_y´, seriestype=:scatter, label=nothing)
+scatter(x´, y´, yerror=σ_y´, label=nothing)
 plot!(𝕩 -> mₑₓ₀₁*𝕩 + bₑₓ₀₁, label="exr 01")
 plot!(𝕩 -> qₑₓ₀₃*𝕩^2 + mₑₓ₀₃*𝕩 + bₑₓ₀₃, label="exr 03")
 ```
@@ -538,7 +538,7 @@ density!(p, chainsₑₓ₀₆[:V_bad], subplot=6, label=nothing, title="V_bad")
 ```{julia}
 bₑₓ₀₆ = mean(chainsₑₓ₀₆[:b]);
 mₑₓ₀₆ = mean(chainsₑₓ₀₆[:m]);
-plot(x, y, yerror=σ_y, seriestype=:scatter, label=nothing)
+scatter(x, y, yerror=σ_y, label=nothing)
 plot!(𝕩 -> mₑₓ₀₂*𝕩 + bₑₓ₀₂, label="exr 02")
 plot!(𝕩 -> mₑₓ₀₆*𝕩 + bₑₓ₀₆, label="exr 06")
 ```
@@ -718,7 +718,7 @@ Sₑₓ₁₁ = 1:2000;
 end
 
 subsetNm2 = N´ - 2
-plot(Sₑₓ₁₁, χ²ₑₓ₁₁, seriestype=:scatter, yaxis=:log, xlabel="S", ylabel="χ²", label=nothing)
+scatter(Sₑₓ₁₁, χ²ₑₓ₁₁, yaxis=:log, xlabel="S", ylabel="χ²", label=nothing)
 hline!([subsetNm2], label="χ²=N-2")
 vline!([mean(σ_y´ .^ 2)], label="mean σ²")
 ```
@@ -746,7 +746,7 @@ Sₑₓ₁₁bis = 938:.01:939;
 	return only(tmp3' * tmp1 * tmp3) # get scalar from 1×1 matrix
 end
 
-plot(Sₑₓ₁₁bis, χ²ₑₓ₁₁bis, seriestype=:scatter, xlabel="S", ylabel="χ²", label=nothing)
+scatter(Sₑₓ₁₁bis, χ²ₑₓ₁₁bis, xlabel="S", ylabel="χ²", label=nothing)
 hline!([subsetNm2], label="χ²=N-2")
 ```
 
@@ -792,7 +792,7 @@ print_summary(chainsₑₓ₁₂)
 bₑₓ₁₂ = mean(chainsₑₓ₁₂[:b]);
 mₑₓ₁₂ = mean(chainsₑₓ₁₂[:m]);
 Sₑₓ₁₂ = mean(chainsₑₓ₁₂[:S]);
-plot(x´, y´, yerror=fill(sqrt(Sₑₓ₁₂), N´), seriestype=:scatter, label=nothing)
+scatter(x´, y´, yerror=fill(sqrt(Sₑₓ₁₂), N´), label=nothing)
 plot!(𝕩 -> mₑₓ₁₂*𝕩 + bₑₓ₁₂, label="exr 12")
 plot!(𝕩 -> mₑₓ₀₁*𝕩 + bₑₓ₀₁, label="exr 01")
 ```
@@ -977,14 +977,16 @@ Now make a plot showing the data points, and the line that goes through the mean
 Z̄´ = [mean(x´), mean(y´)];
 Z´_centered = [Z´[i] - Z̄´ for i ∈ 1:N´];
 Q = sum([z*z' for z ∈ Z´_centered]);
+
 _, eigvecs = eigen(Q);
 eigvecs_max = eigvecs[:, end]; # direction vector of 1st principal component
 mₑₓ₁₆ = eigvecs_max[end] / eigvecs_max[begin];
 bₑₓ₁₆ = Z̄´[2] - mₑₓ₁₆ * Z̄´[1]; # 1st principal component goes through the means
-plot(x´, y´, seriestype=:scatter, label=nothing)
+
+scatter(x´, y´, label=nothing)
 plot!(𝕩 -> mₑₓ₁₆*𝕩 + bₑₓ₁₆, label=nothing)
 ```
-slope = `{julia} mₑₓ₁₆` and intercept = `{julia} bₑₓ₁₆`
+slope = `{julia} round(mₑₓ₁₆; digits=3)` and intercept = `{julia} round(bₑₓ₁₆; digits=3)`
 
 # Intrinsic scatter
 
@@ -1056,5 +1058,5 @@ Re-do exercise 17 but as a Bayesian, with sensible Bayesian priors on $(\theta,b
 # confidence level α → 2 quantiles: 1/2 ± α/2
 level9x = quantile(reduce(vcat, chainsₑₓ₁₇[:V].data), [.5 + .95/2, .5 + .99/2])
 density(chainsₑₓ₁₇[:V], title="V", label=nothing)
-vline!(level9x, label=["95%", "99%"])
+vline!(level9x, label=["95%" "99%"])
 ```
