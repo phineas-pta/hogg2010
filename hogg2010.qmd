@@ -43,6 +43,7 @@ format:
         <style>
         @font-face {font-family: JuliaMono; src: url("https://cdn.jsdelivr.net/gh/cormullion/juliamono-webfonts/JuliaMono-Regular.woff2");}
         pre {font-family: JuliaMono, monospace;}
+        li > a {overflow-wrap: anywhere;}
         </style>
     output-file: index.html # to be used in github actions (deploy as github pages)
 toc: true
@@ -77,6 +78,13 @@ reference: **David W. Hogg**, **Jo Bovy**, **Dustin Lang**. 2010. *Data analysis
 - paper: <https://arxiv.org/pdf/1008.4686>
 - source code: <https://github.com/davidwhogg/DataAnalysisRecipes/blob/master/straightline/straightline.tex>
 - lecture: <https://www.youtube.com/playlist?list=PLBB44462E5201DD1E>
+
+other papers in the same serie *Data analysis recipes* of **David W. Hogg** (also available in original `.tex` files in the above github repository)
+
+- <https://arxiv.org/pdf/2005.14199>
+- <https://arxiv.org/pdf/1710.06068>
+- <https://arxiv.org/pdf/1205.4446>
+- <https://arxiv.org/pdf/0807.4820>
 
 additional resources: various Python implementations, but often not all exercises are solved
 
@@ -389,8 +397,10 @@ $$
 
 log-likelihood: when we are faced with the situation of taking the product of (potentially many) values close to zero, it’s a good idea to take the logarithm and sum the values instead:
 $$
-\log{\mathcal{L}} = -\frac{N}{2}\log(2\pi) - \frac{N}{2}\log{\sigma_{t_i}^2} - \sum_{i=1}^N \frac{(t_i - T)^2}{2\sigma_{t_i}^2} = \mathrm{K} - \frac{1}{2} \chi^2
+\log{\mathcal{L}} = -\frac{N}{2}\log(2\pi) - \frac{N}{2}\log{\sigma_{t_i}^2} - \sum_{i=1}^N \frac{(t_i - T)^2}{2\sigma_{t_i}^2}
 $$
+
+*bonus*: $\log{\mathcal{L}} = \mathrm{K} - \frac{1}{2} \chi^2$ with $K$ some constant
 
 derivative:
 $$
@@ -461,7 +471,7 @@ importance of modeling outliers (data points that don’t fit the assumed model)
 
 one of the well-known methods to deal with outliers: sigma clipping (iteratively removing points 1σ/3σ/5σ far from the fit then re-fit then remove until stable) → a procedure which works very well but doesn’t an objective function to be optimized, so not statiscally justifiable
 
-authors’ proposition: mixture model
+authors’ proposal: mixture model
 
 - outliers come from a distribution with probability $P_{\mathrm{bad}}$, example of distribution: $\mathcal{N}\left(Y_{\mathrm{bad}},V_{\mathrm{bad}}\right)$
 - inliers come from straight line with probability $1-P_{\mathrm{bad}}$, therefore distribution: $\mathcal{N}\left(mx_i+b,\sigma_{y_i}^2\right)$
@@ -595,6 +605,10 @@ chainsₑₓ₀₇ = sample(data_modelₑₓ₀₇, NUTS(), MCMCThreads(), N_sam
 println('═' ^ 80)
 print_information_criterion(data_modelₑₓ₀₇, chainsₑₓ₀₇)
 print_summary(chainsₑₓ₀₇)
+```
+
+```{julia}
+plot(kde((flatten_chains(chainsₑₓ₀₇[:b]), flatten_chains(chainsₑₓ₀₇[:m]))), xlabel="b", ylabel="m")
 ```
 
 ```{julia}
@@ -917,6 +931,10 @@ print_summary(chainsₑₓ₁₂)
 ```
 
 ```{julia}
+plot(kde((flatten_chains(chainsₑₓ₁₂[:b]), flatten_chains(chainsₑₓ₁₂[:m]))), xlabel="b", ylabel="m")
+```
+
+```{julia}
 bₑₓ₁₂ = mean(chainsₑₓ₁₂[:b]);
 mₑₓ₁₂ = mean(chainsₑₓ₁₂[:m]);
 Sₑₓ₁₂ = mean(chainsₑₓ₁₂[:S]);
@@ -1029,6 +1047,10 @@ print_summary(chainsₑₓ₁₃)
 ```
 
 ```{julia}
+plot(kde((flatten_chains(chainsₑₓ₁₃[:b]), flatten_chains(chainsₑₓ₁₃[:m]))), xlabel="b", ylabel="m")
+```
+
+```{julia}
 bₑₓ₁₃ = mean(chainsₑₓ₁₃[:b]);
 mₑₓ₁₃ = mean(chainsₑₓ₁₃[:m]);
 
@@ -1042,7 +1064,7 @@ plot!(𝕩 -> mₑₓ₀₁*𝕩 + bₑₓ₀₁, label="exr 01")
 ::: {.callout-note}
 
 Repeat exercise 13, but using all of the data. Some of the points are now outliers, so your fit may look worse. Follow the fit by a robust procedure analogous to the Bayesian mixture model with bad-data
-probability $P_{\mathrm{bad}}$ described in section Pruning outliers. Use something sensible for the prior probability distribution for $(m,b)$.
+probability $P_{\mathrm{bad}}$ described in section 3. Use something sensible for the prior probability distribution for $(m,b)$.
 
 Plot the 2 results with the data and uncertainties.
 
@@ -1127,6 +1149,10 @@ print_summary(chainsₑₓ₁₄)
 ```
 
 ```{julia}
+plot(kde((flatten_chains(chainsₑₓ₁₄[:b]), flatten_chains(chainsₑₓ₁₄[:m]))), xlabel="b", ylabel="m")
+```
+
+```{julia}
 bₑₓ₁₄ = mean(chainsₑₓ₁₄[:b]);
 mₑₓ₁₄ = mean(chainsₑₓ₁₄[:m]);
 
@@ -1186,7 +1212,7 @@ p
 
 Perform the abominable forward-reverse fitting procedure on points 5 through 20 from the data.
 
-That is, fit a straight line to the $y$ values of the points, using the $y$-direction uncertainties $\sigma_y^2$ only, by the standard method described in section Standard practice.
+That is, fit a straight line to the $y$ values of the points, using the $y$-direction uncertainties $\sigma_y^2$ only, by the standard method described in section 1.
 
 Now transpose the problem and fit the same data but fitting the $x$ values using the $x$-direction uncertainties $\sigma_x^2$ only.
 
@@ -1286,6 +1312,10 @@ chainsₑₓ₁₇ = sample(data_modelₑₓ₁₇, NUTS(), MCMCThreads(), N_sam
 println('═' ^ 80)
 print_information_criterion(data_modelₑₓ₁₇, chainsₑₓ₁₇)
 print_summary(chainsₑₓ₁₇)
+```
+
+```{julia}
+plot(kde((flatten_chains(chainsₑₓ₁₇[:b]), flatten_chains(chainsₑₓ₁₇[:m]))), xlabel="b", ylabel="m")
 ```
 
 ```{julia}
