@@ -20,12 +20,12 @@ format:
     geometry: ["margin=1cm", "footskip=5mm"]
     include-in-header:
       text: |
-        \usepackage{fvextra}
+        \usepackage{fvextra} % to break long line in code block
         \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
     include-before-body:
       text: |
         \RecustomVerbatimEnvironment{verbatim}{Verbatim}{showspaces=false,showtabs=false,breaksymbolleft={},breaklines}
-    monofont: "JuliaMono-Regular"
+    monofont: "JuliaMono-Regular" #  must be installed at system level, e.g. C:\Windows\Fonts or /usr/local/share/fonts/
     fig-align: center
   html:
     page-layout: full
@@ -42,8 +42,9 @@ format:
       text: |
         <style>
         @font-face {font-family: JuliaMono; src: url("https://cdn.jsdelivr.net/gh/cormullion/juliamono-webfonts/JuliaMono-Regular.woff2");}
-        pre {font-family: JuliaMono, monospace;}
-        li > a {overflow-wrap: anywhere;}
+        pre, code {font-family: JuliaMono, monospace;}
+        li > a {overflow-wrap: anywhere;} /* for mobile view */
+        mjx-container[display="true"] {overflow-x: auto;} /* for mobile view */
         </style>
     output-file: index.html # to be used in github actions (deploy as github pages)
 toc: true
@@ -54,10 +55,6 @@ editor: source
 ---
 
 <!--
-use fvextra in latex to break long line in code block
-
-to use local fonts, they must be installed at system level, e.g. C:\Windows\Fonts or /usr/local/share/fonts/
-
 to show plot in pdf, need rsvg-convert
 - in linux: install librsvg or the like
 - in windows to show plot: download rsvg-convert.exe into <quarto path>\bin\tools
@@ -268,6 +265,16 @@ title!("data points with uncertainties as 1σ ellipses")
 
 ## quick summary {.unnumbered}
 
+- **Objective**: Fit a straight line $y=m\,x+b$ to data using $\chi^2$ minimization.
+- **Assumptions**:
+  - Negligible uncertainties in $x$-direction.
+  - Known, Gaussian uncertainties in $y$-direction.
+  - Linear relationship with no intrinsic scatter.
+- **Method**:
+  - Solve using matrix algebra.
+  - Uncertainties in $m$ and $b$ derived from the covariance matrix.
+- **Limitations**: Rarely valid in practice due to real-world data complexities (e.g., outliers, unknown uncertainties).
+
 conventional method for fitting a straight line $y=m\,x+b$ to data points where only the y-values have known Gaussian uncertainties
 
 Construct the matrices:
@@ -466,6 +473,15 @@ As given in *equation (5)*
 # Pruning outliers
 
 ## quick summary {.unnumbered}
+
+- **Generative Model**:
+  - Treat data as a mixture of “good” (on the line) and “bad” (outliers) points.
+  - Likelihood combines foreground (line) and background (outlier) distributions.
+- **Priors**:
+  - Flat priors for $m, b$; informative priors for outlier parameters (e.g., amplitude $P_{\mathrm{bad}}$, background variance $V_{\mathrm{bad}}$).
+- **Marginalization**:
+  - Use MCMC to integrate over nuisance parameters ($P_{\mathrm{bad}},Y_{\mathrm{bad}},V_{\mathrm{bad}}$) and obtain marginalized posterior for $m, b$.
+  - Avoids arbitrary data rejection (e.g., sigma clipping) and provides robust uncertainties.
 
 importance of modeling outliers (data points that don’t fit the assumed model) rather than simply ignoring them
 
@@ -681,6 +697,17 @@ p
 
 ## quick summary {.unnumbered}
 
+- **Standard $\chi^2$ Uncertainties**:
+  - Valid only under strict assumptions (correct uncertainties, no outliers).
+  - Often underestimate true uncertainties in real data.
+- **Bayesian Posterior**:
+  - Uncertainties derived from posterior distribution (e.g., variance, credible intervals).
+  - Accounts for model complexity and outliers.
+- **Empirical Methods**:
+  - **Bootstrap**: Resample data with replacement to estimate parameter distributions.
+  - **Jackknife**: Leave-one-out resampling to assess sensitivity to individual points.
+  - Both methods useful when uncertainties are unknown or unreliable.
+
 This brief section reiterates how to determine the uncertainties (often represented by a covariance matrix) associated with the best-fit parameters obtained from the fitting process.
 
 It stresses that the validity of these uncertainty estimates depends heavily on the correctness of the initial assumptions about the data’s error properties and the appropriateness of the model itself.
@@ -807,9 +834,23 @@ Once the off-diagonal elements are non-zero, $\chi^2$ must be computed by the ma
 
 quick summary: can somehow model as gaussian anyway …
 
+- **Non-Gaussian Uncertainties**:
+  - Replace Gaussian likelihood with appropriate distributions (e.g., biexponential, Student’s t).
+  - Model upper/lower limits by truncating likelihoods (e.g., Poisson for binned data).
+- **Avoid Ad-Hoc Methods**:
+  - Softening $\chi^2$(e.g., Huber loss) is discouraged without generative justification.
+  - Use MCMC to infer parameters of complex likelihoods.
+
 # Goodness of fit and unknown uncertainties
 
 ## quick summary {.unnumbered}
+
+- **$\chi^2$ as a Metric**:
+  - Expected value $\chi^2 \approx N - 2$ for a good fit.
+  - Large deviations suggest model inadequacy or incorrect uncertainties.
+- **Bayesian Perspective**:
+  - Cannot reject a model outright; compare models using Bayes factors.
+  - Infer unknown uncertainties by marginalizing over them in the posterior.
 
 standard (frequentist) paradigm: $\chi^2$ to measure goodness of fit
 
@@ -946,6 +987,12 @@ plot!(𝕩 -> mₑₓ₀₁*𝕩 + bₑₓ₀₁, label="exr 01")
 # Arbitrary 2-dimensional uncertainties
 
 ## quick summary {.unnumbered}
+
+- **Generative Model for 2D Uncertainties**:
+  - Extend to account for uncertainties in $x$ and $y$ directions.
+  - Project uncertainties onto the line’s direction to compute likelihood.
+- **Comparison to PCA**:
+  - PCA is invalid for noisy data; generative model accounts for measurement errors.
 
 more complex scenario of fitting a line when both the x and y measurements have uncertainties: using a covariance tensor for each data point to represent the uncertainties in x, the uncertainties in y, and any correlation between the x and y errors
 
@@ -1271,6 +1318,11 @@ slope = `{julia} round(mₑₓ₁₆; digits=2)` and intercept = `{julia} round(
 # Intrinsic scatter
 
 ## quick summary {.unnumbered}
+
+- **Intrinsic Scatter**:
+  - Add a parameter $ V $ to model intrinsic variance (e.g., perpendicular to the line).
+  - Model scatter perpendicular to the line, marginalizing over true positions.
+  - Avoids ad-hoc "scatter subtraction" and provides principled uncertainty estimates.
 
 introduce an intrinsic Gaussian variance $V$, orthogonal to the line
 
