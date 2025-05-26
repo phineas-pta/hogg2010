@@ -66,7 +66,7 @@ to show plot in pdf, need rsvg-convert
 
 source code of this document: <https://github.com/phineas-pta/hogg2010/blob/main/hogg2010.qmd>
 
-computed using `julia` `{julia} VERSION`, rendered using `quarto` {{< version >}}
+this document’s computations were carried out with `julia` `{julia} VERSION`, and its rendering was achieved via `quarto` {{< version >}}
 
 ## references & resources {.unnumbered}
 
@@ -76,14 +76,14 @@ reference: **David W. Hogg**, **Jo Bovy**, **Dustin Lang**. 2010. *Data analysis
 - source code: <https://github.com/davidwhogg/DataAnalysisRecipes/blob/master/straightline/straightline.tex>
 - lecture: <https://www.youtube.com/playlist?list=PLBB44462E5201DD1E>
 
-other papers in the same serie *Data analysis recipes* of **David W. Hogg** (also available in original `.tex` files in the above github repository)
+you will also find here other papers from the *Data analysis recipes* series by David W. Hogg, and their original TeX files are available in the GitHub repository linked above
 
 - <https://arxiv.org/pdf/2005.14199>
 - <https://arxiv.org/pdf/1710.06068>
 - <https://arxiv.org/pdf/1205.4446>
 - <https://arxiv.org/pdf/0807.4820>
 
-additional resources: various Python implementations, but often not all exercises are solved
+additional resources: the following are various python implementations i’ve come across, but it’s worth noting that they often do not include solutions for every exercise
 
 - <https://astrowizici.st/teaching/phs5000/>
 - <https://www.pymc.io/projects/examples/en/latest/generalized_linear_models/GLM-robust-with-outlier-detection.html>
@@ -125,7 +125,7 @@ data to be used throughout the tutorial:
 
 The full uncertainty covariance matrix for each data point is given by $\begin{bmatrix} \sigma_x^2 & \sigma_{xy} \\ \sigma_{xy} & \sigma_y^2 \end{bmatrix}$ with $\sigma_{xy}=\rho_{xy}\sigma_x\sigma_y$
 
-given the authors’ academic background, those data have very likely astrophysics origin (each measure of x & y has uncertainties & correlation) with some additional tweaking
+given the authors’ academic credentials, these data most likely stem from astrophysics, with each measurement of x and y possessing uncertainties and correlations, and potentially subject to some additional manipulation
 
 ## prepare Julia environment {.unnumbered}
 
@@ -221,7 +221,6 @@ function print_summary(mcmc_chains)
 	# return markdown_table(summarystats(mcmc_chains)[:, [:mean, :std, :mcse, :rhat]]; formatter=value_to_markdown)
 	return summarystats(mcmc_chains)[:, [:mean, :std, :mcse, :rhat]]
 end
-
 
 function print_information_criterion(data_model, mcmc_chains)
 	# posterior log likehood
@@ -720,7 +719,9 @@ Compute the standard uncertainty $\sigma_m^2$ obtained for the slope of the line
 
 :::
 
-$\begin{bmatrix} \sigma_b^2 & \sigma_{mb} \\ \sigma_{mb} & \sigma_m^2 \end{bmatrix} = \left[A^\top\,C^{-1}\,A\right]^{-1} =$
+$$
+\begin{bmatrix} \sigma_b^2 & \sigma_{mb} \\ \sigma_{mb} & \sigma_m^2 \end{bmatrix} = \left[A^\top\,C^{-1}\,A\right]^{-1} =
+$$
 ```{julia}
 inv(transpose(Aₑₓ₀₂) * inv(Cₑₓ₀₂) * Aₑₓ₀₂)
 ```
@@ -742,17 +743,23 @@ Threads.@threads for j ∈ 1:M # bootstrap sample
 end
 ```
 
-$\sigma^2_{b_\mathrm{bootstrap}} = \frac{1}{M}\sum^M_{j=1}\left( b_{j_\mathrm{bootstrap}} - b_\mathrm{best-fit} \right)^2 =$
+$$
+\sigma^2_{b_\mathrm{bootstrap}} = \frac{1}{M}\sum^M_{j=1}\left( b_{j_\mathrm{bootstrap}} - b_\mathrm{best-fit} \right)^2 =
+$$
 ```{julia}
 mean((bₑₓ₀₈_bootstrap .- bₑₓ₀₂) .^ 2)
 ```
 
-$\sigma^2_{m_\mathrm{bootstrap}} = \frac{1}{M}\sum^M_{j=1}\left( m_{j_\mathrm{bootstrap}} - m_\mathrm{best-fit} \right)^2 =$
+$$
+\sigma^2_{m_\mathrm{bootstrap}} = \frac{1}{M}\sum^M_{j=1}\left( m_{j_\mathrm{bootstrap}} - m_\mathrm{best-fit} \right)^2 =
+$$
 ```{julia}
 mean((mₑₓ₀₈_bootstrap .- mₑₓ₀₂) .^ 2)
 ```
 
-$\sigma_{bm_\mathrm{bootstrap}} = \frac{1}{M}\sum^M_{j=1}\left( b_{j_\mathrm{bootstrap}} - b_\mathrm{best-fit} \right)\left( m_{j_\mathrm{bootstrap}} - m_\mathrm{best-fit} \right) =$
+$$
+\sigma_{bm_\mathrm{bootstrap}} = \frac{1}{M}\sum^M_{j=1}\left( b_{j_\mathrm{bootstrap}} - b_\mathrm{best-fit} \right)\left( m_{j_\mathrm{bootstrap}} - m_\mathrm{best-fit} \right) =
+$$
 ```{julia}
 mean((bₑₓ₀₈_bootstrap .- bₑₓ₀₂) .* (mₑₓ₀₈_bootstrap .- mₑₓ₀₂))
 ```
@@ -774,17 +781,23 @@ Threads.@threads for i ∈ 1:N # jackknife sample
 end
 ```
 
-$\sigma^2_{b_\mathrm{jackknife}} = \left( 1 - \frac{1}{N} \right)\sum^N_{i=1}\left( b_{i_\mathrm{jackknife}} - b_\mathrm{best-fit} \right)^2 =$
+$$
+\sigma^2_{b_\mathrm{jackknife}} = \left( 1 - \frac{1}{N} \right)\sum^N_{i=1}\left( b_{i_\mathrm{jackknife}} - b_\mathrm{best-fit} \right)^2 =
+$$
 ```{julia}
 (1 - 1/N) * sum((bₑₓ₀₈_jackknife .- bₑₓ₀₂) .^ 2)
 ```
 
-$\sigma^2_{m_\mathrm{jackknife}} = \left( 1 - \frac{1}{N} \right)\sum^N_{i=1}\left( m_{i_\mathrm{jackknife}} - m_\mathrm{best-fit} \right)^2 =$
+$$
+\sigma^2_{m_\mathrm{jackknife}} = \left( 1 - \frac{1}{N} \right)\sum^N_{i=1}\left( m_{i_\mathrm{jackknife}} - m_\mathrm{best-fit} \right)^2 =
+$$
 ```{julia}
 (1 - 1/N) * sum((mₑₓ₀₈_jackknife .- mₑₓ₀₂) .^ 2)
 ```
 
-$\sigma_{bm_\mathrm{jackknife}} = \left( 1 - \frac{1}{N} \right)\sum^N_{i=1}\left( b_{i_\mathrm{jackknife}} - b_\mathrm{best-fit} \right)\left( m_{i_\mathrm{jackknife}} - m_\mathrm{best-fit} \right) =$
+$$
+\sigma_{bm_\mathrm{jackknife}} = \left( 1 - \frac{1}{N} \right)\sum^N_{i=1}\left( b_{i_\mathrm{jackknife}} - b_\mathrm{best-fit} \right)\left( m_{i_\mathrm{jackknife}} - m_\mathrm{best-fit} \right) =
+$$
 ```{julia}
 (1 - 1/N) * sum((bₑₓ₀₈_jackknife .- bₑₓ₀₂) .* (mₑₓ₀₈_jackknife .- mₑₓ₀₂))
 ```
@@ -1341,7 +1354,6 @@ limitations: it models only the distribution orthogonal to the relationship
 Re-do exercise 13, but now allowing for an orthogonal intrinsic Gaussian variance $V$ and only excluding data point 3. Re-make the plot, showing not the best-fit line but rather the $\pm\sqrt{V}$ lines for the maximum-likelihood intrinsic relation.
 
 :::
-
 
 ```{julia}
 @model function modelₑₓ₁₇(ℕ, ℤ, 𝕊)
