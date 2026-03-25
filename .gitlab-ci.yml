@@ -1,0 +1,38 @@
+image: julia
+
+stages:
+  - deploy
+
+variables:
+  GIT_DEPTH: 1
+
+before_script:
+  - apt-get update
+  - apt-get install -y git curl unzip librsvg2-bin
+  - mkdir /tmp/juliamono
+  - wget -P /tmp/juliamono https://github.com/cormullion/juliamono/releases/latest/download/JuliaMono-ttf.zip
+  - unzip /tmp/juliamono/JuliaMono-ttf.zip -d /tmp/juliamono
+  - mv /tmp/juliamono/*.ttf /usr/local/share/fonts/
+  - fc-cache -fv
+  - git clone https://github.com/quarto-dev/quarto-cli
+  - cd quarto-cli
+  - bash configure.sh
+  - quarto tools install tinytex
+  - cd ..
+
+pages:
+  stage: deploy
+
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - hogg2010.qmd
+
+  script:
+    - julia --project=. -e 'using Pkg; Pkg.add(["Turing", "StatsPlots", "LogExpFunctions", "KernelDensity"])'
+    - quarto render hogg2010.qmd --output-dir='public'
+    # GitLab Pages only publish files in this folder
+
+  artifacts:
+    paths:
+      - public
